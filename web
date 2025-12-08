@@ -1,0 +1,725 @@
+primary_action_color: '#FFBC7D',
+        secondary_action_color: '#A8E6CF'
+      },
+      sky: {
+        background_color: '#B4D7FF',
+        primary_action_color: '#8FC1FF',
+        secondary_action_color: '#FFB6C1'
+      },
+      lemon: {
+        background_color: '#FFF9A3',
+        primary_action_color: '#FFE97D',
+        secondary_action_color: '#FFB6C1'
+      }
+    };
+
+    // Initial Data Structure
+    let orders = [];
+    let currentEditingId = null;
+    let currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0); // Normalize to start of day
+
+    // --- Utility Functions ---
+
+    // Function to generate a unique ID
+    function generateId() {
+      return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+    }
+
+    // Function to show a toast notification
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast active ${type}`;
+      setTimeout(() => {
+        toast.classList.remove('active');
+      }, 3000);
+    }
+
+    // Function to apply the selected theme
+    function changeTheme(themeName) {
+      const theme = themes[themeName];
+      if (!theme) return;
+
+      // Update active theme card
+      document.querySelectorAll('.theme-card').forEach(card => card.classList.remove('active'));
+      document.querySelector(`.theme-card[data-theme="${themeName}"]`).classList.add('active');
+
+      // Update CSS variables for all theme-dependent elements
+      const style = document.documentElement.style;
+      style.setProperty('--theme-bg-color', theme.background_color);
+      style.setProperty('--primary-action-color', theme.primary_action_color);
+      style.setProperty('--secondary-action-color', theme.secondary_action_color);
+
+      // Update dynamic background/border colors (less ideal, but works without complex CSS)
+      document.querySelector('.dashboard-container').style.background = `linear-gradient(135deg, ${theme.background_color} 0%, #B4D7FF 100%)`;
+      document.querySelector('.btn-primary').style.background = `linear-gradient(135deg, ${theme.background_color} 0%, ${theme.primary_action_color} 100%)`;
+      document.querySelector('.btn-primary').style.boxShadow = `0 4px 15px rgba(${hexToRgb(theme.background_color)}, 0.4)`;
+
+      // Update table header background (requires manual class update or new style tag for production)
+      const tableHead = document.querySelector('.data-table thead');
+      tableHead.style.background = `linear-gradient(135deg, ${theme.background_color} 0%, ${theme.primary_action_color} 100%)`;
+      
+      // Update calendar button background
+      document.querySelectorAll('.calendar-nav-btn').forEach(btn => {
+        btn.style.background = `linear-gradient(135deg, ${theme.background_color} 0%, ${theme.primary_action_color} 100%)`;
+        btn.style.boxShadow = `0 4px 12px rgba(${hexToRgb(theme.background_color)}, 0.4)`;
+      });
+
+      // Re-render calendar and table to pick up theme changes (e.g., today/has-orders colors)
+      renderCalendar();
+      renderTable();
+    }
+
+    // Helper function to convert hex to RGB for boxShadow
+    function hexToRgb(hex) {
+      const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+      hex = hex.replace(shorthandRegex, function(m, r, g, b) {
+        return r + r + g + g + b + b;
+      });
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '0, 0, 0';
+    }
+
+    // Function to round the Target DN value based on the specified rules
+    function roundTargetDN(value) {
+      const num = parseInt(value);
+      if (isNaN(num)) return 0;
+      
+      if (num % 5 === 0) {
+        return num;
+      } else if ((num - 1) % 5 === 0) {
+        return num - 1; // e.g., 21 -> 20, 51 -> 50
+      } else if ((num + 2) % 5 === 0) {
+        return num + 2; // e.g., 23 -> 25, 53 -> 55
+      }
+      
+      // Default rounding to nearest 5
+      return Math.round(num / 5) * 5;
+    }
+
+    // Function to load data from SDK (Simulated)
+    async function loadData() {
+      const loadingElement = document.getElementById('loading');
+      loadingElement.classList.add('active');
+      try {
+        // Simulate SDK data fetch
+        const rawData = await element_sdk.persistence.load();
+        orders = rawData.orders || [];
+        showToast('Data loaded successfully!', 'success');
+      } catch (error) {
+        console.error("Error loading data:", error);
+        orders = [];
+        // Simulate initial data if empty or error
+        if (orders.length === 0) {
+          orders = [
+            { id: generateId(), date: '2025-12-01', type: 'BU 17', customerName: 'PT. Makmur Sejahtera', destination: 'Jakarta', targetDN: 20 },
+            { id: generateId(), date: '2025-12-01', type: 'CMI', customerName: 'CV. Jaya Abadi', destination: 'Surabaya', targetDN: 55 },
+            { id: generateId(), date: '2025-12-05', type: 'BU 17', customerName: 'PT. Bahagia Sentosa', destination: 'Bandung', targetDN: 50 },
+            { id: generateId(), date: '2025-12-10', type: 'CMI', customerName: 'UD. Lancar Terus', destination: 'Semarang', targetDN: 25 },
+            { id: generateId(), date: new Date().toISOString().split('T')[0], type: 'BU 17', customerName: 'PT. Kertas DN', destination: 'Yogyakarta', targetDN: 50 }
+          ];
+          // Attempt to save the sample data
+          await saveData();
+          showToast('Loaded sample data.', 'success');
+        }
+      } finally {
+        loadingElement.classList.remove('active');
+        renderAll();
+      }
+    }
+
+    // Function to save data to SDK (Simulated)
+    async function saveData() {
+      try {
+        await element_sdk.persistence.save({ orders });
+        // showToast('Data saved successfully!', 'success'); // Comment out for less spam
+      } catch (error) {
+        console.error("Error saving data:", error);
+        showToast('Error saving data!', 'error');
+      }
+    }
+
+    // --- Rendering Functions ---
+
+    // Calculate statistics
+    function calculateStats(data) {
+      let totalBU17 = 0;
+      let totalCMI = 0;
+      
+      data.forEach(order => {
+        const target = parseFloat(order.targetDN) || 0;
+        if (order.type === 'BU 17') {
+          totalBU17 += target;
+        } else if (order.type === 'CMI') {
+          totalCMI += target;
+        }
+      });
+      
+      return {
+        totalBU17: totalBU17.toFixed(2),
+        totalCMI: totalCMI.toFixed(2),
+        totalAll: (totalBU17 + totalCMI).toFixed(2)
+      };
+    }
+
+    // Render statistics cards
+    function renderStats(data) {
+      const stats = calculateStats(data);
+      document.getElementById('totalBU17').textContent = stats.totalBU17;
+      document.getElementById('totalCMI').textContent = stats.totalCMI;
+      document.getElementById('totalAll').textContent = stats.totalAll;
+    }
+
+    // Populate filter dropdowns
+    function populateFilters() {
+      const filterMonth = document.getElementById('filterMonth');
+      const filterDate = document.getElementById('filterDate');
+      
+      filterMonth.innerHTML = '<option value="">All Months</option>';
+      filterDate.innerHTML = '<option value="">All Dates</option>';
+      
+      const months = new Set();
+      const dates = new Set();
+
+      orders.forEach(order => {
+        const date = new Date(order.date + 'T00:00:00'); // Ensure UTC neutrality for date parts
+        const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const fullDate = order.date;
+        months.add(yearMonth);
+        dates.add(fullDate);
+      });
+
+      const sortedMonths = Array.from(months).sort().reverse();
+      sortedMonths.forEach(ym => {
+        const [year, month] = ym.split('-');
+        const monthName = new Date(year, month - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+        filterMonth.innerHTML += `<option value="${ym}">${monthName}</option>`;
+      });
+
+      const sortedDates = Array.from(dates).sort().reverse();
+      sortedDates.forEach(dateStr => {
+        filterDate.innerHTML += `<option value="${dateStr}">${dateStr}</option>`;
+      });
+    }
+
+    // Filter data based on search and filters
+    function filterData() {
+      const searchInput = document.getElementById('searchInput').value.toLowerCase();
+      const filterMonth = document.getElementById('filterMonth').value;
+      const filterDate = document.getElementById('filterDate').value;
+      const filterType = document.getElementById('filterType').value;
+
+      return orders.filter(order => {
+        const searchMatch = searchInput === '' ||
+          order.customerName.toLowerCase().includes(searchInput) ||
+          order.destination.toLowerCase().includes(searchInput) ||
+          order.type.toLowerCase().includes(searchInput);
+
+        const date = new Date(order.date + 'T00:00:00');
+        const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        
+        const monthMatch = filterMonth === '' || yearMonth === filterMonth;
+        const dateMatch = filterDate === '' || order.date === filterDate;
+        const typeMatch = filterType === '' || order.type === filterType;
+
+        return searchMatch && monthMatch && dateMatch && typeMatch;
+      });
+    }
+
+    // Render the main data table
+    function renderTable() {
+      const tableBody = document.getElementById('tableBody');
+      const emptyState = document.getElementById('emptyState');
+      const filteredOrders = filterData();
+      
+      // Group by date
+      const groupedOrders = filteredOrders.sort((a, b) => new Date(b.date) - new Date(a.date)).reduce((acc, order) => {
+        (acc[order.date] = acc[order.date] || []).push(order);
+        return acc;
+      }, {});
+
+      tableBody.innerHTML = '';
+
+      if (filteredOrders.length === 0) {
+        emptyState.style.display = 'block';
+        renderStats(filteredOrders);
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      
+      let grandTotal = 0;
+
+      for (const date in groupedOrders) {
+        const ordersByDate = groupedOrders[date];
+        let dailyTotal = 0;
+        
+        // Date Group Header Row
+        const dateHeaderRow = document.createElement('tr');
+        dateHeaderRow.classList.add('group-header');
+        const dateObj = new Date(date + 'T00:00:00');
+        const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        dateHeaderRow.innerHTML = `<td colspan="6">🗓️ **Date:** ${formattedDate}</td>`;
+        tableBody.appendChild(dateHeaderRow);
+
+        // Detail Rows
+        ordersByDate.forEach(order => {
+          dailyTotal += order.targetDN;
+          grandTotal += order.targetDN;
+
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${order.date}</td>
+            <td><span class="badge badge-${order.type.toLowerCase().replace(' ', '')}">${order.type}</span></td>
+            <td>${order.customerName}</td>
+            <td>${order.destination}</td>
+            <td>**${order.targetDN.toFixed(2)}**</td>
+            <td>
+              <button class="btn btn-edit" onclick="openEditModal('${order.id}')">✏️ Edit</button>
+              <button class="btn btn-danger" onclick="deleteOrder('${order.id}')">🗑️ Delete</button>
+            </td>
+          `;
+          tableBody.appendChild(row);
+        });
+        
+        // Daily Subtotal Row
+        const subtotalRow = document.createElement('tr');
+        subtotalRow.classList.add('subtotal-row');
+        subtotalRow.innerHTML = `
+          <td colspan="4" style="text-align: right;">**Daily Total (${formattedDate}):**</td>
+          <td>**${dailyTotal.toFixed(2)}**</td>
+          <td></td>
+        `;
+        tableBody.appendChild(subtotalRow);
+      }
+
+      // Grand Total Row
+      const grandTotalRow = document.createElement('tr');
+      grandTotalRow.classList.add('subtotal-row');
+      grandTotalRow.style.backgroundColor = '#FFB6C1';
+      grandTotalRow.style.color = 'white';
+      grandTotalRow.innerHTML = `
+        <td colspan="4" style="text-align: right;">**GRAND TOTAL (All Filtered Orders):**</td>
+        <td>**${grandTotal.toFixed(2)}**</td>
+        <td></td>
+      `;
+      tableBody.appendChild(grandTotalRow);
+
+
+      renderStats(filteredOrders);
+    }
+
+    // Render the calendar view
+    function renderCalendar() {
+      const calendarGrid = document.getElementById('calendarGrid');
+      const calendarMonth = document.getElementById('calendarMonth');
+      
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+
+      calendarMonth.textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+      // Get the first day of the month and the number of days in the month
+      const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 (Sun) to 6 (Sat)
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+      // Collect order counts for the current month
+      const orderCounts = orders.reduce((acc, order) => {
+        const orderDate = new Date(order.date + 'T00:00:00');
+        if (orderDate.getFullYear() === year && orderDate.getMonth() === month) {
+          const dayKey = orderDate.getDate();
+          acc[dayKey] = (acc[dayKey] || 0) + 1;
+        }
+        return acc;
+      }, {});
+
+      // Today's date for comparison
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+
+      calendarGrid.innerHTML = '';
+
+      // Weekday headers
+      ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+        const header = document.createElement('div');
+        header.classList.add('calendar-day-header');
+        header.textContent = day;
+        calendarGrid.appendChild(header);
+      });
+
+      // Pre-padding days (Previous month)
+      // The 'firstDayOfMonth' is 0 for Sunday, 1 for Monday, etc.
+      // We want the week to start on Sunday.
+      const startDayIndex = (firstDayOfMonth === 0) ? 7 : firstDayOfMonth;
+
+      for (let i = startDayIndex; i > 1; i--) {
+        const day = document.createElement('div');
+        day.classList.add('calendar-day', 'other-month');
+        day.innerHTML = `<span class="calendar-day-number">${daysInPrevMonth - i + 2}</span>`;
+        calendarGrid.appendChild(day);
+      }
+
+      // Current month days
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayEl = document.createElement('div');
+        dayEl.classList.add('calendar-day');
+
+        const currentDayOfWeek = new Date(year, month, day).getDay(); // 0 (Sun) to 6 (Sat)
+        if (currentDayOfWeek === 0 || currentDayOfWeek === 6) {
+          dayEl.classList.add('weekend');
+        }
+
+        if (isCurrentMonth && day === today.getDate()) {
+          dayEl.classList.add('today');
+        }
+
+        const orderCount = orderCounts[day] || 0;
+        if (orderCount > 0) {
+          dayEl.classList.add('has-orders');
+          dayEl.innerHTML = `
+            <span class="calendar-day-number">${day}</span>
+            <span class="calendar-day-count">${orderCount} Order(s)</span>
+          `;
+        } else {
+          dayEl.innerHTML = `<span class="calendar-day-number">${day}</span>`;
+        }
+
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        dayEl.addEventListener('click', () => selectDate(dateStr, dayEl));
+
+        calendarGrid.appendChild(dayEl);
+      }
+
+      // Post-padding days (Next month) - to complete a 42-cell grid
+      const totalCells = calendarGrid.children.length;
+      const remainingCells = 42 - totalCells;
+      
+      for (let i = 1; i <= remainingCells; i++) {
+        const day = document.createElement('div');
+        day.classList.add('calendar-day', 'other-month');
+        day.innerHTML = `<span class="calendar-day-number">${i}</span>`;
+        calendarGrid.appendChild(day);
+      }
+    }
+
+    // Handle date selection from the calendar
+    function selectDate(dateStr, dayEl) {
+      // Remove selected class from all days
+      document.querySelectorAll('.calendar-day').forEach(d => d.classList.remove('selected'));
+      
+      // Apply selected class
+      dayEl.classList.add('selected');
+
+      // Update filters
+      document.getElementById('filterDate').value = dateStr;
+      document.getElementById('filterMonth').value = '';
+      document.getElementById('searchInput').value = '';
+      document.getElementById('filterType').value = '';
+
+      // Re-render table
+      renderTable();
+      showToast(`Filtered orders for ${dateStr}`, 'info');
+    }
+
+    // Change month in calendar
+    function changeMonth(delta) {
+      currentDate.setMonth(currentDate.getMonth() + delta);
+      renderCalendar();
+    }
+
+    // Render all components
+    function renderAll() {
+      populateFilters();
+      renderCalendar();
+      renderTable();
+    }
+
+    // --- Event Handlers & Business Logic ---
+
+    // Add new order
+    document.getElementById('addOrderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const dateInput = document.getElementById('dateInput');
+      const orderType = document.getElementById('orderType');
+      const customerName = document.getElementById('customerName');
+      const destination = document.getElementById('destination');
+      const targetDN = document.getElementById('targetDN');
+
+      // Apply rounding rule
+      const roundedTargetDN = roundTargetDN(targetDN.value);
+
+      const newOrder = {
+        id: generateId(),
+        date: dateInput.value,
+        type: orderType.value,
+        customerName: customerName.value,
+        destination: destination.value,
+        targetDN: roundedTargetDN,
+      };
+
+      orders.push(newOrder);
+      await saveData();
+      showToast(`Order for ${newOrder.customerName} added! Target DN: ${roundedTargetDN.toFixed(2)}`, 'success');
+
+      // Clear form and re-render
+      document.getElementById('addOrderForm').reset();
+      // Set date input to today's date after reset
+      dateInput.value = new Date().toISOString().split('T')[0];
+      renderAll();
+    });
+
+    // Delete order
+    window.deleteOrder = async function(id) {
+      if (confirm('Are you sure you want to delete this order?')) {
+        const initialLength = orders.length;
+        orders = orders.filter(order => order.id !== id);
+        if (orders.length < initialLength) {
+          await saveData();
+          showToast('Order deleted successfully!', 'error');
+          renderAll();
+        }
+      }
+    };
+
+    // Open Edit Modal
+    window.openEditModal = function(id) {
+      const order = orders.find(o => o.id === id);
+      if (!order) return;
+
+      currentEditingId = id;
+      document.getElementById('editDate').value = order.date;
+      document.getElementById('editOrderType').value = order.type;
+      document.getElementById('editCustomerName').value = order.customerName;
+      document.getElementById('editDestination').value = order.destination;
+      document.getElementById('editTargetDN').value = order.targetDN;
+
+      document.getElementById('editModal').classList.add('active');
+    };
+
+    // Close Edit Modal
+    window.closeEditModal = function() {
+      document.getElementById('editModal').classList.remove('active');
+      currentEditingId = null;
+    };
+
+    // Update order
+    document.getElementById('editOrderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const index = orders.findIndex(o => o.id === currentEditingId);
+      if (index === -1) {
+        showToast('Error: Order not found for update.', 'error');
+        return;
+      }
+
+      const editedOrder = {
+        id: currentEditingId,
+        date: document.getElementById('editDate').value,
+        type: document.getElementById('editOrderType').value,
+        customerName: document.getElementById('editCustomerName').value,
+        destination: document.getElementById('editDestination').value,
+        targetDN: roundTargetDN(document.getElementById('editTargetDN').value),
+      };
+
+      orders[index] = editedOrder;
+      await saveData();
+      showToast(`Order for ${editedOrder.customerName} updated! Target DN: ${editedOrder.targetDN.toFixed(2)}`, 'success');
+      
+      closeEditModal();
+      renderAll();
+    });
+
+    // Filter event listeners
+    document.getElementById('searchInput').addEventListener('input', renderTable);
+    document.getElementById('filterMonth').addEventListener('change', renderTable);
+    document.getElementById('filterDate').addEventListener('change', renderTable);
+    document.getElementById('filterType').addEventListener('change', renderTable);
+
+    // Calendar navigation event listeners
+    document.getElementById('prevMonth').addEventListener('click', () => changeMonth(-1));
+    document.getElementById('nextMonth').addEventListener('click', () => changeMonth(1));
+
+    // Download Dropdown Toggle
+    document.getElementById('downloadBtn').addEventListener('click', (e) => {
+      document.getElementById('downloadDropdown').classList.toggle('active');
+      e.stopPropagation();
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+      document.getElementById('downloadDropdown').classList.remove('active');
+    });
+
+    // Handle Download Options
+    document.querySelectorAll('.download-option').forEach(option => {
+      option.addEventListener('click', (e) => {
+        const format = e.currentTarget.dataset.format;
+        downloadData(format);
+        document.getElementById('downloadDropdown').classList.remove('active');
+      });
+    });
+
+    // Download function
+    function downloadData(format) {
+      const dataToDownload = filterData();
+      if (dataToDownload.length === 0) {
+        showToast('No data to download based on current filters.', 'error');
+        return;
+      }
+
+      if (format === 'excel') {
+        // Convert to CSV format
+        const headers = ["ID", "Date", "Type", "Customer Name", "Destination", "Target DN (MT)"];
+        const csv = [
+          headers.join(','),
+          ...dataToDownload.map(d => [d.id, d.date, d.type, `"${d.customerName.replace(/"/g, '""')}"`, `"${d.destination.replace(/"/g, '""')}"`, d.targetDN.toFixed(2)].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "dn_orders_data.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('Data downloaded as CSV!', 'success');
+
+      } else if (format === 'pdf') {
+        // Use the print preview for PDF generation
+        preparePrintPreview();
+        window.print();
+        // showToast('Please use your browser\'s Print to PDF option.', 'info');
+      }
+    }
+
+    // Print Preview Logic
+    document.getElementById('printBtn').addEventListener('click', () => {
+      preparePrintPreview();
+      document.getElementById('printModal').classList.add('active');
+    });
+
+    window.closePrintModal = function() {
+      document.getElementById('printModal').classList.remove('active');
+    };
+
+    function preparePrintPreview() {
+      const printPreview = document.getElementById('printPreview');
+      const filteredOrders = filterData();
+      const stats = calculateStats(filteredOrders);
+      
+      const dateGenerated = new Date().toLocaleString();
+
+      // Group by Date for Print View
+      const groupedOrders = filteredOrders.sort((a, b) => new Date(a.date) - new Date(b.date)).reduce((acc, order) => {
+        (acc[order.date] = acc[order.date] || []).push(order);
+        return acc;
+      }, {});
+
+      let tableRows = '';
+      let grandTotal = 0;
+
+      for (const date in groupedOrders) {
+        const ordersByDate = groupedOrders[date];
+        let dailyTotal = 0;
+
+        const dateObj = new Date(date + 'T00:00:00');
+        const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+        tableRows += `<tr class="group-header"><td colspan="5">🗓️ **Date:** ${formattedDate}</td></tr>`;
+
+        ordersByDate.forEach(order => {
+          dailyTotal += order.targetDN;
+          grandTotal += order.targetDN;
+          tableRows += `
+            <tr>
+              <td>${order.type}</td>
+              <td>${order.customerName}</td>
+              <td>${order.destination}</td>
+              <td style="text-align: right;">${order.targetDN.toFixed(2)}</td>
+            </tr>
+          `;
+        });
+
+        tableRows += `
+          <tr class="subtotal-row">
+            <td colspan="3" style="text-align: right;">**Daily Total:**</td>
+            <td style="text-align: right;">**${dailyTotal.toFixed(2)}**</td>
+          </tr>
+        `;
+      }
+
+      if (filteredOrders.length === 0) {
+        tableRows = `<tr><td colspan="5" style="text-align: center;">No data found for the current filters.</td></tr>`;
+      }
+
+      const content = `
+        <div class="print-header">
+          <div class="print-logo">DN Order Report</div>
+          <div class="print-subtitle">Target Vs Realization Create DN Local Order</div>
+        </div>
+        <div class="print-meta">
+          <div>**Report Date:** ${dateGenerated}</div>
+          <div>**Filtered Orders:** ${filteredOrders.length}</div>
+        </div>
+        <div class="print-stats">
+          <div class="print-stat-box" style="background-color: #FFE5E9;">
+            <div class="print-stat-label">Total Target BU 17</div>
+            <div class="print-stat-value">${stats.totalBU17} MT</div>
+          </div>
+          <div class="print-stat-box" style="background-color: #E5F8F0;">
+            <div class="print-stat-label">Total Target CMI</div>
+            <div class="print-stat-value">${stats.totalCMI} MT</div>
+          </div>
+          <div class="print-stat-box" style="background-color: #FFD4A3;">
+            <div class="print-stat-label">Total All Target</div>
+            <div class="print-stat-value">${stats.totalAll} MT</div>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table" style="width: 100%;">
+            <thead>
+              <tr>
+                <th style="width: 10%;">Type</th>
+                <th style="width: 30%;">Customer Name</th>
+                <th style="width: 30%;">Destination</th>
+                <th style="width: 30%; text-align: right;">Target DN (MT)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+      `;
+      
+      printPreview.innerHTML = content;
+      
+      // Ensure print styles are applied to the generated content for better PDF output
+      const printTable = printPreview.querySelector('.data-table');
+      if (printTable) {
+        printTable.querySelectorAll('th').forEach(th => th.style.padding = '10px');
+        printTable.querySelectorAll('td').forEach(td => {
+          td.style.padding = '8px';
+          td.style.borderBottom = '1px solid #ddd';
+        });
+      }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      // Set initial date input to today
+      document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+      loadData();
+    });
+    
+    // Expose changeTheme globally for inline HTML onclick (non-ideal but necessary for the structure)
+    window.changeTheme = changeTheme;
+  </script>
+ </body>
+</html>
