@@ -1,0 +1,2075 @@
+<!doctype html>
+<html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DN Order Tracking Dashboard</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://html2canvas.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #FFE5E5 0%, #E5F3FF 100%);
+      min-height: 100%;
+      width: 100%;
+      box-sizing: border-box;
+      overflow-x: hidden;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    @keyframes floatAnimation {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-20px); }
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(255, 182, 193, 0.5); }
+      50% { box-shadow: 0 0 40px rgba(255, 182, 193, 0.8), 0 0 60px rgba(255, 182, 193, 0.6); }
+    }
+
+    @keyframes slideInFromTop {
+      from {
+        opacity: 0;
+        transform: translateY(-50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .dashboard-container {
+      width: 100%;
+      min-height: 100%;
+      padding: 24px;
+      background: linear-gradient(135deg, #FFB6C1 0%, #B4D7FF 100%);
+      position: relative;
+    }
+
+    .dashboard-container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: 
+        radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+      animation: floatAnimation 6s ease-in-out infinite;
+    }
+
+    .dashboard-header {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      animation: slideInFromTop 0.8s ease-out, glowPulse 3s ease-in-out infinite;
+      position: relative;
+      z-index: 10;
+    }
+
+    .header-title {
+      font-size: 32px;
+      font-weight: 800;
+      color: #2D3748;
+      margin-bottom: 8px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+      letter-spacing: -0.5px;
+    }
+
+    .header-subtitle {
+      font-size: 15px;
+      color: #718096;
+      font-weight: 500;
+    }
+
+    .main-menu {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+      animation: fadeIn 1s ease-out;
+      position: relative;
+      z-index: 10;
+    }
+
+    .calendar-section {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .calendar-section:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .calendar-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: #2D3748;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .calendar-nav {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .calendar-nav-btn {
+      background: linear-gradient(135deg, #FFB6C1 0%, #FF8FA3 100%);
+      color: white;
+      border: none;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(255, 182, 193, 0.4);
+    }
+
+    .calendar-nav-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(255, 182, 193, 0.6);
+    }
+
+    .calendar-month {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2D3748;
+      min-width: 150px;
+      text-align: center;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+    }
+
+    .calendar-day-header {
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #718096;
+      padding: 12px 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .calendar-day {
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      background: #F7FAFC;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+      position: relative;
+    }
+
+    .calendar-day:hover {
+      transform: scale(1.05);
+      background: #E2E8F0;
+      border-color: #FFB6C1;
+    }
+
+    .calendar-day.has-orders {
+      background: linear-gradient(135deg, #FFE5E9 0%, #FFD0D9 100%);
+      border-color: #FFB6C1;
+      box-shadow: 0 2px 8px rgba(255, 182, 193, 0.3);
+    }
+
+    .calendar-day.has-orders::after {
+      content: '';
+      position: absolute;
+      bottom: 4px;
+      width: 6px;
+      height: 6px;
+      background: #FF1744;
+      border-radius: 50%;
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+
+    .calendar-day.today {
+      background: linear-gradient(135deg, #FFB6C1 0%, #FF8FA3 100%);
+      color: white;
+      font-weight: 800;
+      box-shadow: 0 4px 12px rgba(255, 182, 193, 0.5);
+    }
+
+    .calendar-day.selected {
+      background: linear-gradient(135deg, #A8E6CF 0%, #7ED9B3 100%);
+      color: white;
+      font-weight: 800;
+      border-color: #A8E6CF;
+    }
+
+    .calendar-day.weekend {
+      background: linear-gradient(135deg, #FFE5E5 0%, #FFD0D0 100%);
+      color: #D32F2F;
+      border-color: #FFCDD2;
+    }
+
+    .calendar-day.weekend:hover {
+      background: linear-gradient(135deg, #FFD0D0 0%, #FFBABA 100%);
+      border-color: #FF8A80;
+    }
+
+    .calendar-day.weekend.has-orders {
+      background: linear-gradient(135deg, #FFCDD2 0%, #FFBABA 100%);
+      border-color: #FF5252;
+    }
+
+    .calendar-day.other-month {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .calendar-day-number {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .calendar-day-count {
+      font-size: 10px;
+      margin-top: 2px;
+      opacity: 0.8;
+    }
+
+    .theme-selector-section {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .theme-selector-section:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+
+    .theme-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #2D3748;
+      margin-bottom: 16px;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .search-filter-section {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      animation: fadeIn 1.2s ease-out;
+      position: relative;
+      z-index: 10;
+    }
+
+    .search-filter-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #2D3748;
+      margin-bottom: 16px;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .search-filter-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 16px;
+    }
+
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 16px;
+    }
+
+    .theme-card {
+      padding: 12px;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 3px solid transparent;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .theme-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .theme-card:hover::before {
+      left: 100%;
+    }
+
+    .theme-card:hover {
+      transform: translateY(-8px) scale(1.05);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.25);
+    }
+
+    .theme-card.active {
+      border-color: #2D3748;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+
+    .theme-name {
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 8px;
+      color: #2D3748;
+    }
+
+    .theme-preview {
+      width: 100%;
+      height: 60px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .controls-section {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      animation: fadeIn 1.4s ease-out;
+      position: relative;
+      z-index: 10;
+      transition: all 0.3s ease;
+    }
+
+    .controls-section:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #4a5568;
+      margin-bottom: 6px;
+    }
+
+    .form-input, .form-select {
+      padding: 10px 12px;
+      border: 2px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      background: white;
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: #FFB6C1;
+      box-shadow: 0 0 0 3px rgba(255, 182, 193, 0.2);
+    }
+
+    .btn {
+      padding: 14px 28px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.3);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s ease, height 0.6s ease;
+    }
+
+    .btn:hover::before {
+      width: 300px;
+      height: 300px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #FFB6C1 0%, #FF8FA3 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(255, 182, 193, 0.4);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-4px) scale(1.05);
+      box-shadow: 0 12px 24px rgba(255, 182, 193, 0.6);
+    }
+
+    .btn-primary:active {
+      transform: translateY(-2px) scale(1.02);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: #A8E6CF;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #88D4AB;
+      transform: translateY(-2px);
+    }
+
+    .btn-danger {
+      background: #FFB6C1;
+      color: white;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .btn-danger:hover {
+      background: #FF8FA3;
+    }
+
+    .btn-edit {
+      background: #FFD4A3;
+      color: white;
+      padding: 8px 12px;
+      font-size: 12px;
+      margin-right: 8px;
+    }
+
+    .btn-edit:hover {
+      background: #FFBC7D;
+    }
+
+    .btn-print {
+      background: #D4A5D4;
+      color: white;
+      padding: 10px 20px;
+      font-size: 14px;
+    }
+
+    .btn-print:hover {
+      background: #B794C8;
+    }
+
+    .btn-download {
+      background: #B4D7FF;
+      color: white;
+      padding: 8px 16px;
+      font-size: 13px;
+    }
+
+    .btn-download:hover {
+      background: #8FC1FF;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .stats-section {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-left: 6px solid;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: -50%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transform: skewX(-20deg);
+      transition: right 0.6s ease;
+    }
+
+    .stat-card:hover::before {
+      right: 150%;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+    }
+
+    .stat-card.bu17 {
+      border-left-color: #FFB6C1;
+    }
+
+    .stat-card.cmi {
+      border-left-color: #A8E6CF;
+    }
+
+    .stat-card.total {
+      border-left-color: #FFD4A3;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #2D3748;
+    }
+
+    .data-table-section {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      animation: fadeIn 1.6s ease-out;
+      position: relative;
+      z-index: 10;
+      transition: all 0.3s ease;
+    }
+
+    .data-table-section:hover {
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .table-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2D3748;
+    }
+
+    .search-filter {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      padding: 8px 12px;
+      border: 2px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 14px;
+      min-width: 200px;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table thead {
+      background: linear-gradient(135deg, #FFB6C1 0%, #FF8FA3 100%);
+    }
+
+    .data-table th {
+      padding: 14px 12px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      color: white;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .data-table td {
+      padding: 14px 12px;
+      border-bottom: 1px solid #E2E8F0;
+      font-size: 14px;
+      color: #2d3748;
+    }
+
+    .data-table tbody tr:hover {
+      background: #FFF5F7;
+    }
+
+    .data-table tbody tr.group-header {
+      background: linear-gradient(135deg, #FFE5E9 0%, #FFD0D9 100%);
+      font-weight: 700;
+    }
+
+    .data-table tbody tr.group-header:hover {
+      background: linear-gradient(135deg, #FFE5E9 0%, #FFD0D9 100%);
+    }
+
+    .data-table tbody tr.subtotal-row {
+      background: #F7FAFC;
+      font-weight: 700;
+      border-top: 2px solid #E2E8F0;
+      border-bottom: 2px solid #E2E8F0;
+    }
+
+    .data-table tbody tr.subtotal-row:hover {
+      background: #F7FAFC;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-bu17 {
+      background: #FFE5E9;
+      color: #FF1744;
+    }
+
+    .badge-cmi {
+      background: #E5F8F0;
+      color: #00C853;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      color: #FFB6C1;
+      font-weight: 600;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #718096;
+    }
+
+    .download-menu {
+      position: relative;
+      display: inline-block;
+    }
+
+    .download-dropdown {
+      display: none;
+      position: absolute;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+      z-index: 1000;
+      min-width: 150px;
+      right: 0;
+      top: 100%;
+      margin-top: 8px;
+    }
+
+    .download-dropdown.active {
+      display: block;
+    }
+
+    .download-option {
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #2d3748;
+      transition: background 0.2s;
+    }
+
+    .download-option:hover {
+      background: #FFF5F7;
+    }
+
+    .download-option:first-child {
+      border-radius: 8px 8px 0 0;
+    }
+
+    .download-option:last-child {
+      border-radius: 0 0 8px 8px;
+    }
+
+    .toast {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: white;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+      display: none;
+      z-index: 2000;
+      border-left: 4px solid;
+    }
+
+    .toast.success {
+      border-left-color: #A8E6CF;
+    }
+
+    .toast.error {
+      border-left-color: #FFB6C1;
+    }
+
+    .toast.active {
+      display: block;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+      backdrop-filter: blur(5px);
+    }
+
+    .modal-overlay.active {
+      display: flex;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 20px;
+      padding: 32px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: slideInFromTop 0.3s ease;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .modal-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: #2D3748;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 28px;
+      color: #718096;
+      cursor: pointer;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.3s ease;
+    }
+
+    .modal-close:hover {
+      background: #F7FAFC;
+      color: #2D3748;
+    }
+
+    .print-preview {
+      background: white;
+      padding: 40px;
+      margin: 20px auto;
+      max-width: 1200px;
+    }
+
+    .print-header {
+      text-align: center;
+      margin-bottom: 30px;
+      border-bottom: 3px solid #2D3748;
+      padding-bottom: 20px;
+    }
+
+    .print-logo {
+      font-size: 36px;
+      font-weight: 800;
+      color: #2D3748;
+      margin-bottom: 10px;
+    }
+
+    .print-subtitle {
+      font-size: 18px;
+      color: #718096;
+    }
+
+    .print-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #F7FAFC;
+      border-radius: 10px;
+    }
+
+    .print-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .print-stat-box {
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      border: 2px solid #E2E8F0;
+    }
+
+    .print-stat-label {
+      font-size: 12px;
+      color: #718096;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .print-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #2D3748;
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      .print-preview, .print-preview * {
+        visibility: visible;
+      }
+      .print-preview {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+      .btn, .modal-close, .action-buttons {
+        display: none !important;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .main-menu {
+        grid-template-columns: 1fr;
+      }
+
+      .search-filter-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-container {
+        padding: 16px;
+      }
+
+      .main-menu {
+        grid-template-columns: 1fr;
+      }
+
+      .controls-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stats-section {
+        grid-template-columns: 1fr;
+      }
+
+      .table-wrapper {
+        overflow-x: scroll;
+      }
+
+      .theme-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .search-filter-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .calendar-grid {
+        gap: 4px;
+      }
+
+      .calendar-day {
+        font-size: 12px;
+      }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="https://cdn.tailwindcss.com" type="text/javascript"></script>
+ </head>
+ <body>
+  <div class="dashboard-container">
+   <div class="dashboard-header">
+    <h1 class="header-title" id="dashboardTitle">Target Vs Realization Create DN Local Order Brown Paper</h1>
+    <p class="header-subtitle" id="companyName">DN Order Tracking System</p>
+   </div>
+   <div class="main-menu">
+    <div class="calendar-section">
+     <div class="calendar-header">
+      <h2 class="calendar-title">📅 Order Calendar</h2>
+      <div class="calendar-nav"><button class="calendar-nav-btn" id="prevMonth">◀</button>
+       <div class="calendar-month" id="calendarMonth">
+        January 2024
+       </div><button class="calendar-nav-btn" id="nextMonth">▶</button>
+      </div>
+     </div>
+     <div class="calendar-grid" id="calendarGrid"><!-- Calendar will be generated here -->
+     </div>
+    </div>
+    <div class="theme-selector-section">
+     <h2 class="theme-title">🎨 Choose Theme</h2>
+     <div class="theme-grid">
+      <div class="theme-card active" data-theme="pink" onclick="changeTheme('pink')">
+       <div class="theme-preview" style="background: linear-gradient(135deg, #FFB6C1 0%, #FF8FA3 100%);"></div>
+       <div class="theme-name">
+        Pink Blossom
+       </div>
+      </div>
+      <div class="theme-card" data-theme="mint" onclick="changeTheme('mint')">
+       <div class="theme-preview" style="background: linear-gradient(135deg, #A8E6CF 0%, #7ED9B3 100%);"></div>
+       <div class="theme-name">
+        Mint Fresh
+       </div>
+      </div>
+      <div class="theme-card" data-theme="lavender" onclick="changeTheme('lavender')">
+       <div class="theme-preview" style="background: linear-gradient(135deg, #D4A5D4 0%, #B794C8 100%);"></div>
+       <div class="theme-name">
+        Lavender Dream
+       </div>
+      </div>
+      <div class="theme-card" data-theme="peach" onclick="changeTheme('peach')">
+       <div class="theme-preview" style="background: linear-gradient(135deg, #FFD4A3 0%, #FFBC7D 100%);"></div>
+       <div class="theme-name">
+        Peach Sunset
+       </div>
+      </div>
+      <div class="theme-card" data-theme="sky" onclick="changeTheme('sky')">
+       <div class="theme-preview" style="background: linear-gradient(135deg, #B4D7FF 0%, #8FC1FF 100%);"></div>
+       <div class="theme-name">
+        Sky Blue
+       </div>
+      </div>
+      <div class="theme-card" data-theme="lemon" onclick="changeTheme('lemon')">
+       <div class="theme-preview" style="background: linear-gradient(135deg, #FFF9A3 0%, #FFE97D 100%);"></div>
+       <div class="theme-name">
+        Lemon Zest
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+   <div class="search-filter-section">
+    <h2 class="search-filter-title">🔍 Search &amp; Filter</h2>
+    <div class="search-filter-grid"><input type="text" id="searchInput" class="form-input" placeholder="🔍 Search by customer, destination, type..."> <select id="filterMonth" class="form-select"> <option value="">All Months</option> </select> <select id="filterDate" class="form-select"> <option value="">All Dates</option> </select> <select id="filterType" class="form-select"> <option value="">All Types</option> <option value="BU 17">BU 17</option> <option value="CMI">CMI</option> </select>
+    </div>
+   </div>
+   <div class="controls-section">
+    <h2 style="font-size: 18px; font-weight: 700; color: #2D3748; margin-bottom: 16px;">Add New DN Order</h2>
+    <form id="addOrderForm">
+     <div class="controls-grid">
+      <div class="form-group"><label class="form-label" for="dateInput">Date</label> <input type="date" id="dateInput" class="form-input" required>
+      </div>
+      <div class="form-group"><label class="form-label" for="orderType">Order Type</label> <select id="orderType" class="form-select" required> <option value="">Select Type</option> <option value="BU 17">BU 17</option> <option value="CMI">CMI</option> </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="customerName">Customer Name</label> <input type="text" id="customerName" class="form-input" placeholder="Enter customer name" required>
+      </div>
+      <div class="form-group"><label class="form-label" for="destination">Destination</label> <input type="text" id="destination" class="form-input" placeholder="Enter destination" required>
+      </div>
+      <div class="form-group"><label class="form-label" for="targetDN">Target DN (MT)</label> <input type="number" id="targetDN" class="form-input" placeholder="Enter target" step="0.01" required>
+      </div>
+     </div>
+     <div class="action-buttons"><button type="submit" class="btn btn-primary" id="addBtn"> <span>➕</span> Add Order </button>
+     </div>
+    </form>
+   </div>
+   <div class="stats-section">
+    <div class="stat-card bu17">
+     <div class="stat-label">
+      Total Target BU 17
+     </div>
+     <div class="stat-value" id="totalBU17">
+      0.00
+     </div>
+    </div>
+    <div class="stat-card cmi">
+     <div class="stat-label">
+      Total Target CMI
+     </div>
+     <div class="stat-value" id="totalCMI">
+      0.00
+     </div>
+    </div>
+    <div class="stat-card total">
+     <div class="stat-label">
+      Total All Target
+     </div>
+     <div class="stat-value" id="totalAll">
+      0.00
+     </div>
+    </div>
+   </div>
+   <div class="data-table-section">
+    <div class="table-header">
+     <h2 class="table-title">📊 DN Orders Data</h2>
+     <div style="display: flex; gap: 12px;"><button class="btn btn-print" id="printBtn">🖨️ Print Preview</button>
+      <div class="download-menu"><button class="btn btn-download" id="downloadBtn">📥 Download</button>
+       <div class="download-dropdown" id="downloadDropdown">
+        <div class="download-option" data-format="excel">
+         Excel (.xlsx)
+        </div>
+        <div class="download-option" data-format="pdf">
+         PDF (.pdf)
+        </div>
+        <div class="download-option" data-format="image">
+         Image (.png)
+        </div>
+       </div>
+      </div>
+     </div>
+    </div>
+    <div class="loading" id="loading">
+     Loading data...
+    </div>
+    <div class="table-wrapper">
+     <table class="data-table" id="dataTable">
+      <thead>
+       <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Customer Name</th>
+        <th>Destination</th>
+        <th>Target DN (MT)</th>
+       </tr>
+      </thead>
+      <tbody id="tableBody">
+      </tbody>
+     </table>
+     <div id="emptyState" class="empty-state" style="display: none;">
+      <p>📋 No orders yet. Add your first order above!</p>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="toast" id="toast"></div><!-- Print Preview Modal -->
+  <div class="modal-overlay" id="printModal">
+   <div class="modal-content" style="max-width: 1200px;">
+    <div class="modal-header">
+     <h2 class="modal-title">🖨️ Print Preview</h2><button class="modal-close" onclick="closePrintModal()">×</button>
+    </div>
+    <div class="print-preview" id="printPreview"><!-- Print content will be generated here -->
+    </div>
+    <div class="action-buttons"><button class="btn btn-primary" onclick="window.print()"> <span>🖨️</span> Print Now </button> <button class="btn btn-secondary" onclick="closePrintModal()"> <span>✖️</span> Close </button>
+    </div>
+   </div>
+  </div>
+  <script>
+    const themes = {
+      pink: {
+        background_color: '#FFB6C1',
+        primary_action_color: '#FF8FA3',
+        secondary_action_color: '#A8E6CF'
+      },
+      mint: {
+        background_color: '#A8E6CF',
+        primary_action_color: '#7ED9B3',
+        secondary_action_color: '#FFB6C1'
+      },
+      lavender: {
+        background_color: '#D4A5D4',
+        primary_action_color: '#B794C8',
+        secondary_action_color: '#A8E6CF'
+      },
+      peach: {
+        background_color: '#FFD4A3',
+        primary_action_color: '#FFBC7D',
+        secondary_action_color: '#A8E6CF'
+      },
+      sky: {
+        background_color: '#B4D7FF',
+        primary_action_color: '#8FC1FF',
+        secondary_action_color: '#FFB6C1'
+      },
+      lemon: {
+        background_color: '#FFF9A3',
+        primary_action_color: '#FFE97D',
+        secondary_action_color: '#A8E6CF'
+      }
+    };
+
+    const defaultConfig = {
+      dashboard_title: "Target Vs Realization Create DN Local Order Brown Paper",
+      company_name: "DN Order Tracking System",
+      background_color: "#FFB6C1",
+      surface_color: "#FFFFFF",
+      text_color: "#2D3748",
+      primary_action_color: "#FF8FA3",
+      secondary_action_color: "#A8E6CF",
+      font_family: "Inter",
+      font_size: 16,
+      current_theme: "pink"
+    };
+
+    let allOrders = [];
+    let filteredOrders = [];
+    let currentCalendarDate = new Date();
+    let selectedDate = null;
+
+    // Calendar Functions
+    function renderCalendar() {
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+      
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      document.getElementById('calendarMonth').textContent = `${monthNames[month]} ${year}`;
+      
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const daysInPrevMonth = new Date(year, month, 0).getDate();
+      
+      const calendarGrid = document.getElementById('calendarGrid');
+      calendarGrid.innerHTML = `
+        <div class="calendar-day-header">Sun</div>
+        <div class="calendar-day-header">Mon</div>
+        <div class="calendar-day-header">Tue</div>
+        <div class="calendar-day-header">Wed</div>
+        <div class="calendar-day-header">Thu</div>
+        <div class="calendar-day-header">Fri</div>
+        <div class="calendar-day-header">Sat</div>
+      `;
+      
+      // Previous month days
+      for (let i = firstDay - 1; i >= 0; i--) {
+        const day = daysInPrevMonth - i;
+        const dayDiv = document.createElement('div');
+        dayDiv.className = 'calendar-day other-month';
+        dayDiv.innerHTML = `<div class="calendar-day-number">${day}</div>`;
+        calendarGrid.appendChild(dayDiv);
+      }
+      
+      // Current month days
+      const today = new Date();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const currentDate = new Date(year, month, day);
+        const dayOfWeek = currentDate.getDay();
+        const ordersOnDay = allOrders.filter(o => o.date === dateStr);
+        
+        const dayDiv = document.createElement('div');
+        dayDiv.className = 'calendar-day';
+        
+        // Check if weekend (Saturday = 6, Sunday = 0)
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          dayDiv.classList.add('weekend');
+        }
+        
+        if (today.getDate() === day && today.getMonth() === month && today.getFullYear() === year) {
+          dayDiv.classList.add('today');
+        }
+        
+        if (ordersOnDay.length > 0) {
+          dayDiv.classList.add('has-orders');
+        }
+        
+        if (selectedDate === dateStr) {
+          dayDiv.classList.add('selected');
+        }
+        
+        dayDiv.innerHTML = `
+          <div class="calendar-day-number">${day}</div>
+          ${ordersOnDay.length > 0 ? `<div class="calendar-day-count">${ordersOnDay.length}</div>` : ''}
+        `;
+        
+        dayDiv.onclick = () => selectDate(dateStr);
+        calendarGrid.appendChild(dayDiv);
+      }
+      
+      // Next month days
+      const totalCells = calendarGrid.children.length - 7; // minus headers
+      const remainingCells = (Math.ceil(totalCells / 7) * 7) - totalCells;
+      for (let day = 1; day <= remainingCells; day++) {
+        const dayDiv = document.createElement('div');
+        dayDiv.className = 'calendar-day other-month';
+        dayDiv.innerHTML = `<div class="calendar-day-number">${day}</div>`;
+        calendarGrid.appendChild(dayDiv);
+      }
+    }
+
+    function selectDate(dateStr) {
+      if (selectedDate === dateStr) {
+        selectedDate = null;
+        document.getElementById('filterDate').value = '';
+      } else {
+        selectedDate = dateStr;
+        document.getElementById('filterDate').value = dateStr;
+        
+        // Auto-fill date in add form and scroll to it
+        document.getElementById('dateInput').value = dateStr;
+        document.querySelector('.controls-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      renderCalendar();
+      applyFilters();
+    }
+
+    document.getElementById('prevMonth').addEventListener('click', () => {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+      renderCalendar();
+    });
+
+    document.getElementById('nextMonth').addEventListener('click', () => {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+      renderCalendar();
+    });
+
+    // Change Theme
+    window.changeTheme = function(themeName) {
+      const theme = themes[themeName];
+      if (theme && window.elementSdk) {
+        window.elementSdk.config.background_color = theme.background_color;
+        window.elementSdk.config.primary_action_color = theme.primary_action_color;
+        window.elementSdk.config.secondary_action_color = theme.secondary_action_color;
+        window.elementSdk.config.current_theme = themeName;
+        
+        window.elementSdk.setConfig({
+          background_color: theme.background_color,
+          primary_action_color: theme.primary_action_color,
+          secondary_action_color: theme.secondary_action_color,
+          current_theme: themeName
+        });
+
+        // Update active state
+        document.querySelectorAll('.theme-card').forEach(card => {
+          card.classList.remove('active');
+        });
+        document.querySelector(`[data-theme="${themeName}"]`).classList.add('active');
+      }
+    };
+
+    // Initialize Element SDK
+    async function onConfigChange(config) {
+      const titleElement = document.getElementById('dashboardTitle');
+      const companyElement = document.getElementById('companyName');
+      
+      if (titleElement) {
+        titleElement.textContent = config.dashboard_title || defaultConfig.dashboard_title;
+      }
+      if (companyElement) {
+        companyElement.textContent = config.company_name || defaultConfig.company_name;
+      }
+
+      // Apply colors
+      const bgColor = config.background_color || defaultConfig.background_color;
+      const surfaceColor = config.surface_color || defaultConfig.surface_color;
+      const textColor = config.text_color || defaultConfig.text_color;
+      const primaryColor = config.primary_action_color || defaultConfig.primary_action_color;
+      const secondaryColor = config.secondary_action_color || defaultConfig.secondary_action_color;
+      
+      document.querySelector('.dashboard-container').style.background = `linear-gradient(135deg, ${bgColor} 0%, ${primaryColor} 100%)`;
+      document.querySelectorAll('.data-table thead').forEach(el => {
+        el.style.background = `linear-gradient(135deg, ${bgColor} 0%, ${primaryColor} 100%)`;
+      });
+      document.querySelectorAll('.btn-primary').forEach(el => {
+        el.style.background = `linear-gradient(135deg, ${bgColor} 0%, ${primaryColor} 100%)`;
+      });
+      document.querySelectorAll('.btn-secondary').forEach(el => {
+        el.style.background = secondaryColor;
+      });
+      document.querySelectorAll('.btn-danger').forEach(el => {
+        el.style.background = bgColor;
+      });
+      document.querySelectorAll('.stat-card.bu17').forEach(el => {
+        el.style.borderLeftColor = bgColor;
+      });
+      document.querySelectorAll('.stat-card.cmi').forEach(el => {
+        el.style.borderLeftColor = secondaryColor;
+      });
+      document.querySelectorAll('.loading').forEach(el => {
+        el.style.color = bgColor;
+      });
+
+      // Update active theme card
+      const currentTheme = config.current_theme || defaultConfig.current_theme;
+      document.querySelectorAll('.theme-card').forEach(card => {
+        card.classList.remove('active');
+      });
+      const activeCard = document.querySelector(`[data-theme="${currentTheme}"]`);
+      if (activeCard) {
+        activeCard.classList.add('active');
+      }
+
+      // Apply font
+      const customFont = config.font_family || defaultConfig.font_family;
+      const baseFontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      document.body.style.fontFamily = `${customFont}, ${baseFontStack}`;
+
+      // Apply font size
+      const baseSize = config.font_size || defaultConfig.font_size;
+      document.querySelector('.header-title').style.fontSize = `${baseSize * 1.75}px`;
+      document.querySelector('.table-title').style.fontSize = `${baseSize * 1.25}px`;
+      document.querySelector('.theme-title').style.fontSize = `${baseSize * 1.125}px`;
+      document.body.style.fontSize = `${baseSize}px`;
+    }
+
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange,
+        mapToCapabilities: (config) => ({
+          recolorables: [
+            {
+              get: () => config.background_color || defaultConfig.background_color,
+              set: (value) => {
+                window.elementSdk.config.background_color = value;
+                window.elementSdk.setConfig({ background_color: value });
+              }
+            },
+            {
+              get: () => config.surface_color || defaultConfig.surface_color,
+              set: (value) => {
+                window.elementSdk.config.surface_color = value;
+                window.elementSdk.setConfig({ surface_color: value });
+              }
+            },
+            {
+              get: () => config.text_color || defaultConfig.text_color,
+              set: (value) => {
+                window.elementSdk.config.text_color = value;
+                window.elementSdk.setConfig({ text_color: value });
+              }
+            },
+            {
+              get: () => config.primary_action_color || defaultConfig.primary_action_color,
+              set: (value) => {
+                window.elementSdk.config.primary_action_color = value;
+                window.elementSdk.setConfig({ primary_action_color: value });
+              }
+            },
+            {
+              get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
+              set: (value) => {
+                window.elementSdk.config.secondary_action_color = value;
+                window.elementSdk.setConfig({ secondary_action_color: value });
+              }
+            }
+          ],
+          borderables: [],
+          fontEditable: {
+            get: () => config.font_family || defaultConfig.font_family,
+            set: (value) => {
+              window.elementSdk.config.font_family = value;
+              window.elementSdk.setConfig({ font_family: value });
+            }
+          },
+          fontSizeable: {
+            get: () => config.font_size || defaultConfig.font_size,
+            set: (value) => {
+              window.elementSdk.config.font_size = value;
+              window.elementSdk.setConfig({ font_size: value });
+            }
+          }
+        }),
+        mapToEditPanelValues: (config) => new Map([
+          ["dashboard_title", config.dashboard_title || defaultConfig.dashboard_title],
+          ["company_name", config.company_name || defaultConfig.company_name]
+        ])
+      });
+    }
+
+    // Initialize Data SDK
+    const dataHandler = {
+      onDataChanged(data) {
+        allOrders = data;
+        applyFilters();
+        updateStats(data);
+        updateMonthFilter(data);
+        updateDateFilter(data);
+        renderCalendar();
+      }
+    };
+
+    async function initApp() {
+      if (window.dataSdk) {
+        const initResult = await window.dataSdk.init(dataHandler);
+        if (!initResult.isOk) {
+          showToast('Failed to initialize data storage', 'error');
+          return;
+        }
+      }
+
+      // Set default date to today
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('dateInput').value = today;
+      
+      // Initialize calendar
+      renderCalendar();
+    }
+
+    // Add Order
+    document.getElementById('addOrderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      if (allOrders.length >= 999) {
+        showToast('Maximum limit of 999 orders reached. Please delete some orders first.', 'error');
+        return;
+      }
+
+      const addBtn = document.getElementById('addBtn');
+      addBtn.disabled = true;
+      addBtn.textContent = 'Adding...';
+
+      const orderData = {
+        date: document.getElementById('dateInput').value,
+        order_type: document.getElementById('orderType').value,
+        customer_name: document.getElementById('customerName').value,
+        destination: document.getElementById('destination').value,
+        target_dn: parseFloat(document.getElementById('targetDN').value) || 0,
+        created_at: new Date().toISOString()
+      };
+
+      const result = await window.dataSdk.create(orderData);
+
+      if (result.isOk) {
+        showToast('Order added successfully!', 'success');
+        document.getElementById('addOrderForm').reset();
+        document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+      } else {
+        showToast('Failed to add order. Please try again.', 'error');
+      }
+
+      addBtn.disabled = false;
+      addBtn.innerHTML = '<span>➕</span> Add Order';
+    });
+
+    // Render Table with grouping by Order Type
+    function renderTable(orders) {
+      const tbody = document.getElementById('tableBody');
+      const emptyState = document.getElementById('emptyState');
+      
+      if (orders.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      
+      // Group orders by order_type
+      const bu17Orders = orders.filter(o => o.order_type === 'BU 17').sort((a, b) => new Date(b.date) - new Date(a.date));
+      const cmiOrders = orders.filter(o => o.order_type === 'CMI').sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      let html = '';
+      
+      // BU 17 Section
+      if (bu17Orders.length > 0) {
+        html += `<tr class="group-header">
+          <td colspan="5" style="font-size: 16px; padding: 16px 12px;">📦 BU 17 ORDERS</td>
+        </tr>`;
+        
+        bu17Orders.forEach((order, index) => {
+          html += `
+            <tr>
+              <td>${formatDate(order.date)}</td>
+              <td><span class="badge badge-bu17">${order.order_type}</span></td>
+              <td>${order.customer_name}</td>
+              <td>${order.destination}</td>
+              <td><strong>${order.target_dn.toFixed(2)}</strong></td>
+            </tr>
+          `;
+        });
+        
+        const bu17Total = bu17Orders.reduce((sum, o) => sum + o.target_dn, 0);
+        html += `<tr class="subtotal-row">
+          <td colspan="4" style="text-align: right; padding-right: 20px;">TOTAL BU 17:</td>
+          <td><strong style="font-size: 16px; color: #FF1744;">${bu17Total.toFixed(2)} MT</strong></td>
+        </tr>`;
+      }
+      
+      // CMI Section
+      if (cmiOrders.length > 0) {
+        html += `<tr class="group-header">
+          <td colspan="5" style="font-size: 16px; padding: 16px 12px;">📦 CMI ORDERS</td>
+        </tr>`;
+        
+        cmiOrders.forEach((order, index) => {
+          html += `
+            <tr>
+              <td>${formatDate(order.date)}</td>
+              <td><span class="badge badge-cmi">${order.order_type}</span></td>
+              <td>${order.customer_name}</td>
+              <td>${order.destination}</td>
+              <td><strong>${order.target_dn.toFixed(2)}</strong></td>
+            </tr>
+          `;
+        });
+        
+        const cmiTotal = cmiOrders.reduce((sum, o) => sum + o.target_dn, 0);
+        html += `<tr class="subtotal-row">
+          <td colspan="4" style="text-align: right; padding-right: 20px;">TOTAL CMI:</td>
+          <td><strong style="font-size: 16px; color: #00C853;">${cmiTotal.toFixed(2)} MT</strong></td>
+        </tr>`;
+      }
+      
+      tbody.innerHTML = html;
+    }
+
+    // Update Stats
+    function updateStats(orders) {
+      const totalBU17 = orders
+        .filter(o => o.order_type === 'BU 17')
+        .reduce((sum, order) => sum + order.target_dn, 0);
+      
+      const totalCMI = orders
+        .filter(o => o.order_type === 'CMI')
+        .reduce((sum, order) => sum + order.target_dn, 0);
+      
+      const totalAll = totalBU17 + totalCMI;
+
+      document.getElementById('totalBU17').textContent = totalBU17.toFixed(2);
+      document.getElementById('totalCMI').textContent = totalCMI.toFixed(2);
+      document.getElementById('totalAll').textContent = totalAll.toFixed(2);
+    }
+
+    // Update Date Filter
+    function updateDateFilter(orders) {
+      const dates = [...new Set(orders.map(o => o.date))].sort().reverse();
+      const filterSelect = document.getElementById('filterDate');
+      
+      filterSelect.innerHTML = '<option value="">All Dates</option>' +
+        dates.map(date => `<option value="${date}">${formatDate(date)}</option>`).join('');
+    }
+
+    // Update Month Filter
+    function updateMonthFilter(orders) {
+      const months = [...new Set(orders.map(o => {
+        const date = new Date(o.date);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      }))].sort().reverse();
+      
+      const filterSelect = document.getElementById('filterMonth');
+      
+      filterSelect.innerHTML = '<option value="">All Months</option>' +
+        months.map(month => {
+          const [year, monthNum] = month.split('-');
+          const monthName = new Date(year, monthNum - 1, 1).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+          return `<option value="${month}">${monthName}</option>`;
+        }).join('');
+    }
+
+    // Apply Filters
+    function applyFilters() {
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const monthFilter = document.getElementById('filterMonth').value;
+      const dateFilter = document.getElementById('filterDate').value;
+      const typeFilter = document.getElementById('filterType').value;
+      
+      filteredOrders = allOrders.filter(order => {
+        const matchesSearch = 
+          order.customer_name.toLowerCase().includes(searchTerm) ||
+          order.destination.toLowerCase().includes(searchTerm) ||
+          order.order_type.toLowerCase().includes(searchTerm);
+        
+        const orderDate = new Date(order.date);
+        const orderMonth = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
+        
+        const matchesMonth = !monthFilter || orderMonth === monthFilter;
+        const matchesDate = !dateFilter || order.date === dateFilter;
+        const matchesType = !typeFilter || order.order_type === typeFilter;
+        
+        return matchesSearch && matchesMonth && matchesDate && matchesType;
+      });
+      
+      renderTable(filteredOrders);
+    }
+
+    // Search
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+    // Month Filter
+    document.getElementById('filterMonth').addEventListener('change', applyFilters);
+
+    // Date Filter
+    document.getElementById('filterDate').addEventListener('change', applyFilters);
+
+    // Type Filter
+    document.getElementById('filterType').addEventListener('change', applyFilters);
+
+    // Print Preview
+    document.getElementById('printBtn').addEventListener('click', () => {
+      generatePrintPreview();
+      document.getElementById('printModal').classList.add('active');
+    });
+
+    window.closePrintModal = function() {
+      document.getElementById('printModal').classList.remove('active');
+    };
+
+    function generatePrintPreview() {
+      const printPreview = document.getElementById('printPreview');
+      
+      const bu17Orders = filteredOrders.filter(o => o.order_type === 'BU 17');
+      const cmiOrders = filteredOrders.filter(o => o.order_type === 'CMI');
+      
+      const totalBU17 = bu17Orders.reduce((sum, order) => sum + order.target_dn, 0);
+      const totalCMI = cmiOrders.reduce((sum, order) => sum + order.target_dn, 0);
+      const totalAll = totalBU17 + totalCMI;
+
+      let tableContent = '';
+      
+      // BU 17 Section
+      if (bu17Orders.length > 0) {
+        tableContent += `
+          <tr style="background: #FFE5E9; font-weight: 700;">
+            <td colspan="6" style="padding: 14px 12px; font-size: 15px;">📦 BU 17 ORDERS</td>
+          </tr>
+        `;
+        
+        bu17Orders.forEach((order, index) => {
+          tableContent += `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${formatDate(order.date)}</td>
+              <td>${order.order_type}</td>
+              <td>${order.customer_name}</td>
+              <td>${order.destination}</td>
+              <td><strong>${order.target_dn.toFixed(2)}</strong></td>
+            </tr>
+          `;
+        });
+        
+        tableContent += `
+          <tr style="background: #F7FAFC; font-weight: 700; border-top: 2px solid #E2E8F0; border-bottom: 2px solid #E2E8F0;">
+            <td colspan="5" style="text-align: right; padding-right: 20px;">TOTAL BU 17:</td>
+            <td><strong style="font-size: 16px; color: #FF1744;">${totalBU17.toFixed(2)} MT</strong></td>
+          </tr>
+        `;
+      }
+      
+      // CMI Section
+      if (cmiOrders.length > 0) {
+        tableContent += `
+          <tr style="background: #E5F8F0; font-weight: 700;">
+            <td colspan="6" style="padding: 14px 12px; font-size: 15px;">📦 CMI ORDERS</td>
+          </tr>
+        `;
+        
+        cmiOrders.forEach((order, index) => {
+          tableContent += `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${formatDate(order.date)}</td>
+              <td>${order.order_type}</td>
+              <td>${order.customer_name}</td>
+              <td>${order.destination}</td>
+              <td><strong>${order.target_dn.toFixed(2)}</strong></td>
+            </tr>
+          `;
+        });
+        
+        tableContent += `
+          <tr style="background: #F7FAFC; font-weight: 700; border-top: 2px solid #E2E8F0; border-bottom: 2px solid #E2E8F0;">
+            <td colspan="5" style="text-align: right; padding-right: 20px;">TOTAL CMI:</td>
+            <td><strong style="font-size: 16px; color: #00C853;">${totalCMI.toFixed(2)} MT</strong></td>
+          </tr>
+        `;
+      }
+
+      printPreview.innerHTML = `
+        <div class="print-header">
+          <div class="print-logo">${document.getElementById('dashboardTitle').textContent}</div>
+          <div class="print-subtitle">${document.getElementById('companyName').textContent}</div>
+        </div>
+        
+        <div class="print-meta">
+          <div>
+            <strong>Report Date:</strong> ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+          </div>
+          <div>
+            <strong>Total Orders:</strong> ${filteredOrders.length}
+          </div>
+          <div>
+            <strong>Generated:</strong> ${new Date().toLocaleTimeString()}
+          </div>
+        </div>
+
+        <div class="print-stats">
+          <div class="print-stat-box">
+            <div class="print-stat-label">Total Target BU 17</div>
+            <div class="print-stat-value">${totalBU17.toFixed(2)} MT</div>
+          </div>
+          <div class="print-stat-box">
+            <div class="print-stat-label">Total Target CMI</div>
+            <div class="print-stat-value">${totalCMI.toFixed(2)} MT</div>
+          </div>
+          <div class="print-stat-box">
+            <div class="print-stat-label">Total All Target</div>
+            <div class="print-stat-value">${totalAll.toFixed(2)} MT</div>
+          </div>
+        </div>
+
+        <table class="data-table" style="margin-top: 20px;">
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Customer Name</th>
+              <th>Destination</th>
+              <th>Target DN (MT)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableContent}
+          </tbody>
+        </table>
+      `;
+    }
+
+    // Download Menu
+    document.getElementById('downloadBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dropdown = document.getElementById('downloadDropdown');
+      dropdown.classList.toggle('active');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.download-menu')) {
+        document.getElementById('downloadDropdown').classList.remove('active');
+      }
+    });
+
+    // Close modals when clicking outside
+    document.getElementById('printModal').addEventListener('click', (e) => {
+      if (e.target.id === 'printModal') {
+        closePrintModal();
+      }
+    });
+
+    // Download Options
+    document.querySelectorAll('.download-option').forEach(option => {
+      option.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const format = e.target.dataset.format;
+        
+        if (format === 'excel') {
+          downloadExcel();
+        } else if (format === 'pdf') {
+          downloadPDF();
+        } else if (format === 'image') {
+          downloadImage();
+        }
+        
+        document.getElementById('downloadDropdown').classList.remove('active');
+      });
+    });
+
+    // Download Excel
+    function downloadExcel() {
+      const bu17Orders = filteredOrders.filter(o => o.order_type === 'BU 17');
+      const cmiOrders = filteredOrders.filter(o => o.order_type === 'CMI');
+      
+      const data = [];
+      
+      if (bu17Orders.length > 0) {
+        data.push({ 'Date': 'BU 17 ORDERS', 'Type': '', 'Customer Name': '', 'Destination': '', 'Target DN (MT)': '' });
+        bu17Orders.forEach(order => {
+          data.push({
+            'Date': formatDate(order.date),
+            'Type': order.order_type,
+            'Customer Name': order.customer_name,
+            'Destination': order.destination,
+            'Target DN (MT)': order.target_dn
+          });
+        });
+        const totalBU17 = bu17Orders.reduce((sum, o) => sum + o.target_dn, 0);
+        data.push({ 'Date': '', 'Type': '', 'Customer Name': '', 'Destination': 'TOTAL BU 17:', 'Target DN (MT)': totalBU17.toFixed(2) });
+        data.push({ 'Date': '', 'Type': '', 'Customer Name': '', 'Destination': '', 'Target DN (MT)': '' });
+      }
+      
+      if (cmiOrders.length > 0) {
+        data.push({ 'Date': 'CMI ORDERS', 'Type': '', 'Customer Name': '', 'Destination': '', 'Target DN (MT)': '' });
+        cmiOrders.forEach(order => {
+          data.push({
+            'Date': formatDate(order.date),
+            'Type': order.order_type,
+            'Customer Name': order.customer_name,
+            'Destination': order.destination,
+            'Target DN (MT)': order.target_dn
+          });
+        });
+        const totalCMI = cmiOrders.reduce((sum, o) => sum + o.target_dn, 0);
+        data.push({ 'Date': '', 'Type': '', 'Customer Name': '', 'Destination': 'TOTAL CMI:', 'Target DN (MT)': totalCMI.toFixed(2) });
+      }
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'DN Orders');
+      XLSX.writeFile(wb, `DN_Orders_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      showToast('Excel file downloaded successfully!', 'success');
+    }
+
+    // Download PDF
+    function downloadPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      
+      doc.setFontSize(16);
+      doc.text('DN Order Tracking Report', 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
+      
+      const bu17Orders = filteredOrders.filter(o => o.order_type === 'BU 17');
+      const cmiOrders = filteredOrders.filter(o => o.order_type === 'CMI');
+      
+      let y = 35;
+      doc.setFontSize(9);
+      
+      if (bu17Orders.length > 0) {
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('BU 17 ORDERS', 14, y);
+        y += 7;
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        
+        bu17Orders.forEach((order, index) => {
+          if (y > 270) {
+            doc.addPage();
+            y = 20;
+          }
+          
+          doc.text(`${index + 1}. Date: ${formatDate(order.date)} | Type: ${order.order_type}`, 14, y);
+          y += 5;
+          doc.text(`   Customer: ${order.customer_name} | Destination: ${order.destination}`, 14, y);
+          y += 5;
+          doc.text(`   Target DN: ${order.target_dn} MT`, 14, y);
+          y += 8;
+        });
+        
+        const totalBU17 = bu17Orders.reduce((sum, o) => sum + o.target_dn, 0);
+        doc.setFont(undefined, 'bold');
+        doc.text(`TOTAL BU 17: ${totalBU17.toFixed(2)} MT`, 14, y);
+        y += 12;
+        doc.setFont(undefined, 'normal');
+      }
+      
+      if (cmiOrders.length > 0) {
+        if (y > 250) {
+          doc.addPage();
+          y = 20;
+        }
+        
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('CMI ORDERS', 14, y);
+        y += 7;
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        
+        cmiOrders.forEach((order, index) => {
+          if (y > 270) {
+            doc.addPage();
+            y = 20;
+          }
+          
+          doc.text(`${index + 1}. Date: ${formatDate(order.date)} | Type: ${order.order_type}`, 14, y);
+          y += 5;
+          doc.text(`   Customer: ${order.customer_name} | Destination: ${order.destination}`, 14, y);
+          y += 5;
+          doc.text(`   Target DN: ${order.target_dn} MT`, 14, y);
+          y += 8;
+        });
+        
+        const totalCMI = cmiOrders.reduce((sum, o) => sum + o.target_dn, 0);
+        doc.setFont(undefined, 'bold');
+        doc.text(`TOTAL CMI: ${totalCMI.toFixed(2)} MT`, 14, y);
+        doc.setFont(undefined, 'normal');
+      }
+      
+      doc.save(`DN_Orders_${new Date().toISOString().split('T')[0]}.pdf`);
+      showToast('PDF file downloaded successfully!', 'success');
+    }
+
+    // Download Image
+    async function downloadImage() {
+      showToast('Preparing image download...', 'success');
+      
+      const element = document.querySelector('.data-table-section');
+      
+      try {
+        const canvas = await html2canvas(element, {
+          backgroundColor: '#ffffff',
+          scale: 2
+        });
+        
+        canvas.toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `DN_Orders_${new Date().toISOString().split('T')[0]}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Image downloaded successfully!', 'success');
+        });
+      } catch (error) {
+        showToast('Image download not available', 'error');
+      }
+    }
+
+    // Utility Functions
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function showToast(message, type) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${type} active`;
+      
+      setTimeout(() => {
+        toast.classList.remove('active');
+      }, 3000);
+    }
+
+    // Initialize
+    initApp();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9ab926ab45fbf91e',t:'MTc2NTMzMjA1Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
