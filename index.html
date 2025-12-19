@@ -1,921 +1,1959 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // --- Global State ---
-    let orders = [];
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IKK Order DN Tracker</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    body {
+      box-sizing: border-box;
+      font-family: 'Inter', sans-serif;
+    }
+    
+    .offline-indicator {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 100;
+      transition: all 0.3s;
+    }
+    
+    .online {
+      background: #10b981;
+      color: white;
+    }
+    
+    .offline {
+      background: #ef4444;
+      color: white;
+    }
+    
+    .syncing {
+      background: #f59e0b;
+      color: white;
+    }
+    
+    .calendar-day {
+      min-height: 80px;
+      transition: all 0.2s;
+    }
+    
+    .calendar-day:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .order-completed {
+      position: relative;
+    }
+    
+    .order-completed::after {
+      content: '✓';
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      color: #10b981;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="h-full bg-gradient-to-br from-blue-50 to-indigo-100"><!-- Offline Indicator -->
+  <div id="offlineIndicator" class="offline-indicator online no-print">
+   🟢 Online
+  </div><!-- Login Screen -->
+  <div id="loginScreen" class="w-full h-full flex items-center justify-center">
+   <div class="bg-white rounded-2xl shadow-2xl p-8 w-96">
+    <div class="text-center mb-6">
+     <h1 class="text-3xl font-bold text-indigo-700 mb-2">IKK ORDER DN</h1>
+     <p class="text-gray-600">Indah Kiat Karawang</p>
+    </div>
+    <form id="loginForm" class="space-y-4">
+     <div><label for="username" class="block text-sm font-medium text-gray-700 mb-2">Username</label> <input type="text" id="username" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="IKK">
+     </div>
+     <div><label for="password" class="block text-sm font-medium text-gray-700 mb-2">Password</label> <input type="password" id="password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="123">
+     </div><button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition">Login</button>
+    </form>
+   </div>
+  </div><!-- Main Dashboard -->
+  <div id="mainDashboard" class="hidden w-full h-full overflow-auto">
+   <div class="max-w-7xl mx-auto p-6"><!-- Header -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+     <div class="flex justify-between items-center">
+      <div>
+       <h1 id="dashboardTitle" class="text-3xl font-bold text-indigo-700">ORDER DN IKK - INDAH KIAT KARAWANG</h1>
+       <p class="text-gray-600 mt-1">Customer Order Dashboard</p>
+      </div>
+      <div class="flex gap-3 no-print"><button id="sendEmailBtn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">📧 Send Email</button> <button id="settingsBtn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">⚙️ Settings</button> <button id="exportBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">📄 Export</button> <button id="logoutBtn" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">Logout</button>
+      </div>
+     </div>
+    </div><!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+     <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-gray-600 text-sm">Total Orders</p>
+      <p id="totalOrders" class="text-3xl font-bold text-indigo-700">0</p>
+     </div>
+     <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-gray-600 text-sm">BU 17 Orders</p>
+      <p id="bu17Orders" class="text-3xl font-bold text-blue-600">0</p>
+      <p class="text-gray-500 text-xs mt-1">Total: <span id="bu17Total" class="font-semibold">0</span> MT</p>
+     </div>
+     <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-gray-600 text-sm">CMI Orders</p>
+      <p id="cmiOrders" class="text-3xl font-bold text-green-600">0</p>
+      <p class="text-gray-500 text-xs mt-1">Total: <span id="cmiTotal" class="font-semibold">0</span> MT</p>
+     </div>
+     <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-gray-600 text-sm">Total DN (MT)</p>
+      <p id="totalDN" class="text-3xl font-bold text-purple-600">0</p>
+     </div>
+     <div class="bg-white rounded-xl shadow p-5">
+      <p class="text-gray-600 text-sm">This Month</p>
+      <p id="monthOrders" class="text-3xl font-bold text-orange-600">0</p>
+     </div>
+    </div><!-- Calendar and Add Order -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6"><!-- Calendar -->
+     <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg p-6">
+      <div class="flex justify-between items-center mb-4">
+       <h2 class="text-xl font-bold text-gray-800">Calendar</h2>
+       <div class="flex gap-2"><button id="prevMonth" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">←</button> <span id="currentMonth" class="px-4 py-1 font-semibold"></span> <button id="nextMonth" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">→</button>
+       </div>
+      </div>
+      <div class="grid grid-cols-7 gap-2">
+       <div class="text-center font-semibold text-gray-700 py-2">
+        Sun
+       </div>
+       <div class="text-center font-semibold text-gray-700 py-2">
+        Mon
+       </div>
+       <div class="text-center font-semibold text-gray-700 py-2">
+        Tue
+       </div>
+       <div class="text-center font-semibold text-gray-700 py-2">
+        Wed
+       </div>
+       <div class="text-center font-semibold text-gray-700 py-2">
+        Thu
+       </div>
+       <div class="text-center font-semibold text-gray-700 py-2">
+        Fri
+       </div>
+       <div class="text-center font-semibold text-gray-700 py-2">
+        Sat
+       </div>
+       <div id="calendarGrid" class="col-span-7 grid grid-cols-7 gap-2"></div>
+      </div>
+     </div><!-- Add Order Form -->
+     <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">Add New Order</h2>
+      <form id="addOrderForm" class="space-y-4">
+       <div><label for="businessUnit" class="block text-sm font-medium text-gray-700 mb-2">Business Unit</label> <select id="businessUnit" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required> <option value="">Select BU</option> <option value="BU 17">BU 17</option> <option value="CMI">CMI</option> </select>
+       </div>
+       <div><label for="customerSearch" class="block text-sm font-medium text-gray-700 mb-2">Search Customer</label> <input type="text" id="customerSearch" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Type to search..."> <select id="customerSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mt-2" required> <option value="">Select Customer</option> </select>
+       </div>
+       <div><label for="orderDate" class="block text-sm font-medium text-gray-700 mb-2">Order Date</label> <input type="date" id="orderDate" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white" required>
+        <p class="text-xs text-gray-500 mt-1">📅 Click calendar date or type manually</p>
+       </div>
+       <div><label for="dnInput" class="block text-sm font-medium text-gray-700 mb-2">DN Input (MT)</label> <input type="number" id="dnInput" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Enter DN value" required>
+        <p class="text-xs text-gray-500 mt-1">Target DN: <span id="calculatedTarget" class="font-semibold">0</span> MT</p>
+       </div><button type="submit" id="addOrderBtn" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition">Add Order</button>
+      </form>
+     </div>
+    </div><!-- Order List -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+     <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-bold text-gray-800">Order List</h2>
+      <div class="flex gap-3"><input type="text" id="searchOrder" class="px-3 py-2 border border-gray-300 rounded-lg" placeholder="Search orders..."> <input type="month" id="filterMonth" class="px-3 py-2 border border-gray-300 rounded-lg">
+      </div>
+     </div>
+     <div class="overflow-x-auto">
+      <table class="w-full">
+       <thead class="bg-gray-50">
+        <tr>
+         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
+         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Customer Name</th>
+         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Destination</th>
+         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Business Unit</th>
+         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">DN Target (MT)</th>
+         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase no-print">Actions</th>
+        </tr>
+       </thead>
+       <tbody id="orderTableBody" class="divide-y divide-gray-200">
+       </tbody>
+      </table>
+     </div>
+    </div><!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+     <div class="bg-white rounded-2xl shadow-lg p-6">
+      <div class="flex justify-between items-center mb-4">
+       <h2 class="text-xl font-bold text-gray-800">Top Customers</h2>
+       <div class="flex gap-2"><input type="month" id="chartFilterMonth" class="px-2 py-1 border border-gray-300 rounded text-sm"> <button id="chartBar" class="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">📊 Bar</button> <button id="chartLine" class="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">📈 Line</button>
+       </div>
+      </div>
+      <canvas id="customerChart" class="w-full" height="200"></canvas>
+     </div>
+     <div class="bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">Monthly Orders</h2>
+      <canvas id="monthlyChart" class="w-full" height="200"></canvas>
+     </div>
+    </div>
+    <div class="text-center text-gray-600 text-sm">
+     <p id="footerText">© 2024 Indah Kiat Karawang</p>
+    </div>
+   </div>
+  </div><!-- Settings Modal -->
+  <div id="settingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-auto">
+   <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl m-4 max-h-screen overflow-y-auto">
+    <h2 class="text-2xl font-bold text-gray-800 mb-6">Settings</h2>
+    <div class="space-y-6"><!-- Add Custom Customer -->
+     <div class="border-b pb-4">
+      <h3 class="text-lg font-semibold text-gray-700 mb-3">Add Custom Customer</h3>
+      <div id="customCustomerList" class="space-y-2 mb-3 max-h-40 overflow-y-auto bg-gray-50 p-3 rounded-lg"><!-- Custom customers will be listed here -->
+      </div>
+      <div class="space-y-2"><input type="text" id="newCustomerName" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Customer Name (e.g., PT CUSTOMER BARU)"> <input type="text" id="newCustomerDestination" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Destination (e.g., JAKARTA)"> <select id="newCustomerBU" class="w-full px-3 py-2 border border-gray-300 rounded-lg"> <option value="">Select Business Unit</option> <option value="BU 17">BU 17</option> <option value="CMI">CMI</option> </select> <button id="addCustomCustomer" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">✚ Add Customer</button>
+      </div>
+     </div><!-- Theme Settings -->
+     <div class="border-b pb-4">
+      <h3 class="text-lg font-semibold text-gray-700 mb-3">Theme Settings</h3>
+      <div class="grid grid-cols-2 gap-4">
+       <div><label class="block text-sm font-medium text-gray-700 mb-2">Primary Color</label> <input type="color" id="primaryColor" class="w-full h-12 rounded-lg border border-gray-300">
+       </div>
+       <div><label class="block text-sm font-medium text-gray-700 mb-2">Background Color</label> <input type="color" id="bgColor" class="w-full h-12 rounded-lg border border-gray-300">
+       </div>
+      </div>
+      <div id="colorPreview" class="p-4 rounded-lg text-center text-white font-semibold mt-3">
+       Preview Theme
+      </div>
+     </div><!-- Email Address Management -->
+     <div class="border-b pb-4">
+      <h3 class="text-lg font-semibold text-gray-700 mb-3">Email Address List</h3>
+      <div id="emailAddressList" class="space-y-2 mb-3 max-h-40 overflow-y-auto bg-gray-50 p-3 rounded-lg"><!-- Email addresses will be listed here -->
+      </div>
+      <div class="flex gap-2"><input type="email" id="newEmailAddress" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg" placeholder="email@example.com"> <button id="addEmailAddress" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">✚ Add Email</button>
+      </div>
+     </div><!-- Email Settings -->
+     <div class="border-b pb-4">
+      <h3 class="text-lg font-semibold text-gray-700 mb-3">Email Notification Settings</h3>
+      <div class="space-y-3">
+       <div><label class="block text-sm font-medium text-gray-700 mb-2">Your Email (Sender)</label> <input type="email" id="senderEmail" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="your.email@company.com">
+       </div>
+       <div><label class="block text-sm font-medium text-gray-700 mb-2">Recipient Email</label> <input type="email" id="recipientEmail" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="recipient@company.com">
+       </div>
+       <div class="bg-blue-50 p-3 rounded-lg">
+        <p class="text-xs text-blue-700">📧 Email notifications will be sent to Gmail, Outlook, or Teams when orders are created.</p>
+       </div>
+      </div>
+     </div>
+     <div class="flex gap-3"><button id="saveSettings" class="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition">Save All Settings</button> <button id="closeSettings" class="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400 transition">Cancel</button>
+     </div>
+    </div>
+   </div>
+  </div><!-- Edit Order Modal -->
+  <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+   <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <h2 class="text-2xl font-bold text-gray-800 mb-6">Edit Order</h2>
+    <form id="editOrderForm" class="space-y-4">
+     <div><label for="editBusinessUnit" class="block text-sm font-medium text-gray-700 mb-2">Business Unit</label> <select id="editBusinessUnit" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required> <option value="BU 17">BU 17</option> <option value="CMI">CMI</option> </select>
+     </div>
+     <div><label for="editCustomerName" class="block text-sm font-medium text-gray-700 mb-2">Customer Name</label> <input type="text" id="editCustomerName" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+     </div>
+     <div><label for="editDestination" class="block text-sm font-medium text-gray-700 mb-2">Destination</label> <input type="text" id="editDestination" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+     </div>
+     <div><label for="editDnTarget" class="block text-sm font-medium text-gray-700 mb-2">DN Target (MT)</label> <input type="number" id="editDnTarget" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+     </div>
+     <div><label for="editOrderDate" class="block text-sm font-medium text-gray-700 mb-2">Order Date</label> <input type="date" id="editOrderDate" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+     </div>
+     <div><label class="flex items-center gap-2"> <input type="checkbox" id="editCompleted" class="w-4 h-4"> <span class="text-sm font-medium text-gray-700">Mark as Completed</span> </label>
+     </div>
+     <div class="flex gap-3"><button type="submit" class="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700">Update</button> <button type="button" id="closeEdit" class="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400">Cancel</button>
+     </div>
+    </form>
+   </div>
+  </div><!-- Send Email Modal -->
+  <div id="sendEmailModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-auto">
+   <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl m-4 max-h-screen overflow-y-auto">
+    <h2 class="text-2xl font-bold text-gray-800 mb-6">📧 Send Email Report</h2>
+    <form id="sendEmailForm" class="space-y-4">
+     <div class="bg-blue-50 p-4 rounded-lg mb-4">
+      <p class="text-sm text-blue-800">✉️ Email akan dibuka di aplikasi email default Anda (Gmail, Outlook, dll)</p>
+     </div>
+     <div><label for="emailSender" class="block text-sm font-medium text-gray-700 mb-2">Your Email (Sender) *</label> <input type="email" id="emailSender" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500" placeholder="your.email@company.com" required>
+     </div>
+     <div><label for="emailRecipient" class="block text-sm font-medium text-gray-700 mb-2">Recipient Email * (or select from list)</label> <select id="emailRecipientSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 mb-2"> <option value="">Select from saved emails...</option> </select> <input type="email" id="emailRecipient" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500" placeholder="recipient@company.com" required>
+     </div>
+     <div><label for="emailSubject" class="block text-sm font-medium text-gray-700 mb-2">Subject</label> <input type="text" id="emailSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500" value="IKK Order DN Report">
+     </div>
+     <div><label class="block text-sm font-medium text-gray-700 mb-2">Report Content</label>
+      <div class="border border-gray-300 rounded-lg p-4 bg-gray-50 max-h-60 overflow-y-auto">
+       <div id="emailPreview" class="text-sm text-gray-700 whitespace-pre-wrap font-mono"></div>
+      </div>
+     </div>
+     <div class="flex gap-3"><button type="submit" class="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition">📤 Send Email</button> <button type="button" id="closeSendEmail" class="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400 transition">Cancel</button>
+     </div>
+    </form>
+   </div>
+  </div><!-- Export Modal -->
+  <div id="exportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+   <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <h2 class="text-2xl font-bold text-gray-800 mb-6">Export Options</h2>
+    <div class="space-y-3"><button id="exportPDF" class="w-full bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 transition">📄 Export as PDF</button> <button id="exportExcel" class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition">📊 Export as Excel</button> <button id="exportPNG" class="w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition">🖼️ Export as PNG</button> <button id="exportJPG" class="w-full bg-purple-500 text-white py-3 rounded-lg font-semibold hover:bg-purple-600 transition">📷 Export as JPG</button> <button id="printPreview" class="w-full bg-gray-600 text-white py-3 rounded-lg font-semibold hover:bg-gray-700 transition">🖨️ Print Preview</button> <button id="closeExport" class="w-full bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400 transition">Cancel</button>
+    </div>
+   </div>
+  </div>
+  <script>
+    const CMI_CUSTOMERS = [
+      { name: "CIPTA MULTI BUANA PERKASA, PT", destination: "JAKARTA BARAT" },
+      { name: "DAYACIPTA KEMASINDO, PT (GD) CIBITUNG", destination: "Bekasi Timur" },
+      { name: "PT DAYACIPTA KEMASINDO", destination: "KOTA TANGERANG BANTEN" },
+      { name: "PT. HEXA PRIMA PERSADA", destination: "TANGERANG" },
+      { name: "SENTRALINDO TEGUH GEMILANG, PT (GD)", destination: "CIKARANG" },
+      { name: "PT SENTRALINDO TEGUH GEMILANG", destination: "BEKASI" },
+      { name: "PT. TRISTAR MAKMUR KARTONINDO, GD", destination: "CIKARANG PUSAT - BEKASI" },
+      { name: "DAYACIPTA KEMASINDO, PT (GD) KARAWANG", destination: "Karawang" },
+      { name: "PT.MODERN MULTI KEMASINDO", destination: "TANGERANG" },
+      { name: "MULTI ARTHA ABADI, PT", destination: "TANGERANG" },
+      { name: "PT. KEMASAN INDAH SEJAHTERA", destination: "BANTEN" },
+      { name: "PT ADINA MULTI WAHANA", destination: "KOTA TANGERANG BANTEN" },
+      { name: "SETIAJAYA KEMASINDO MADYA, PT", destination: "KOTA TANGERANG" },
+      { name: "PT PANCAMITRA PACKINDO", destination: "TANGERANG BANTEN" },
+      { name: "PT. SATYAMITRA KEMAS LESTARI TBK", destination: "TANGERANG" },
+      { name: "PT. GLOBAL PAPYRUS SEMESTA", destination: "BANDUNG" },
+      { name: "PT. GLOBAL PAPYRUS SEMESTA", destination: "JAKARTA BARAT" },
+      { name: "PT.OJI SINAR MAS PACKAGING", destination: "CIKARANG PUSAT.KAB BEKASI" },
+      { name: "MULTIBOX INDAH, PT", destination: "DESA KAREO-TANGERANG" },
+      { name: "PT KARYA INDAH MULTIGUNA", destination: "KOTA BEKASI JAWA BARAT" },
+      { name: "PT. PUTRA UNIVERSAL CORRUGATED", destination: "TANGERANG" },
+      { name: "PT.CARTONINDUS SUMBERJAYA", destination: "BANTEN" },
+      { name: "PT MALINDO IRFAN / BEKASI", destination: "BEKASI" },
+      { name: "PABOXIN,PT", destination: "JAWA TIMUR" },
+      { name: "DEVASH SUKSES FOREVER", destination: "GRESIK" },
+      { name: "PT QINGDA MASPION PAPER PRODUCTS", destination: "SIDOARJO" },
+      { name: "PT. GLOBAL PAPYRUS SEMESTA", destination: "SEMARANG" },
+      { name: "PT. WIJAYA SANTOSA BOX", destination: "SIDOARJO" },
+      { name: "PT. SARANA PACKAGING AGRAPANA (GD)", destination: "Lamongan" },
+      { name: "PT.SANTOSO JAWI (GD)", destination: "SIDOARJO" },
+      { name: "PT. ZINYANG INDONESIA", destination: "KAB.BOYOLALI" },
+      { name: "SURYA PRIMA SEMESTA,PT", destination: "SIDOARJO" },
+      { name: "PT. Cakrawala Cemerlang Box", destination: "Kab. Mojokerto" },
+      { name: "PT. KEDAWUNG SETIA CORRUGATED CARTON BOX INDUSTRIAL", destination: "KARANGPILANG, SURABAYA" },
+      { name: "PT.SENTRAL KEMASINDO TEGUH", destination: "GRESIK" },
+      { name: "PT. KARYA WANGSA INVESTAMA", destination: "KAB. KENDAL JAWA TENGAH" },
+      { name: "JAWASURYA KENCANAINDAH, PT", destination: "SEMARANG" },
+      { name: "PT.ANUGRAH ANEKABOX", destination: "GRESIK" },
+      { name: "PT SUPRACOR SEJAHTERA", destination: "MOJOKERTO" },
+      { name: "PT. UNIVERSAL JASA KEMAS (GD)", destination: "Pasuruan" },
+      { name: "PT. UNIVERSAL JASA KEMAS", destination: "Pasuruan" },
+      { name: "PT.MULIA GRAND MANUFACTURE", destination: "GRESIK" },
+      { name: "PT.SURINDO TEGUH GEMILANG", destination: "GRESIK" },
+      { name: "SURINDO TEGUH GEMILANG, PT (GD)", destination: "GRESIK" },
+      { name: "PT. SARI INDAH PEMBUNGKUS INDUSTRI", destination: "MAKASSAR" },
+      { name: "PT SINAR GARUDA MAKMURINDO", destination: "GRESIK" },
+      { name: "PT.MITRACITRA MANDIRIOFFSET", destination: "SIDOARJO" },
+      { name: "MITRACITRA MANDIRIOFFSET, PT (GD)", destination: "MOJOKERTO" },
+      { name: "PURI EKA PERSADA BANDUNG", destination: "BANDUNG" },
+      { name: "PURI EKA PERSADA PURWAKARTA", destination: "PURWAKARTA" },
+      { name: "KATI KARTIKA MURNI CIKARANG", destination: "CIKARANG" },
+      { name: "KATI KARTIKA MURNI KARAWACI", destination: "KARAWACI" },
+      { name: "PURI EKA PERSADA BAWEN", destination: "BAWEN" },
+      { name: "PURI EKA PERSADA DEMAK", destination: "DEMAK" }
+    ];
+
+    const BU17_CUSTOMERS = [
+      { name: "ASIA PAPERINDO PERKASA", destination: "BATAM" },
+      { name: "PURINUSA EKA PERSADA", destination: "BANDUNG" },
+      { name: "PURINUSA EKA PERSADA", destination: "BAWEN" },
+      { name: "PURINUSA EKA PERSADA", destination: "DEMAK" },
+      { name: "PURINUSA EKA PERSADA", destination: "SUBANG" },
+      { name: "KATI KARTIKA MURNI", destination: "CIKARANG" },
+      { name: "KATI KARTIKA MURNI", destination: "TANGERANG" },
+      { name: "KONVERTA MITRA ABADI", destination: "LAMPUNG" },
+      { name: "PARAMITRA GUNAKARYA CEMERLANG", destination: "BOGOR" },
+      { name: "PABRIK TJIWI KIMIA", destination: "MOJOKERTO" },
+      { name: "KREASI KOTAK MEGAH", destination: "DELI SERDANG" },
+      { name: "KREASI KOTAK MEGAH", destination: "MEDAN" }
+    ];
+
+    const defaultConfig = {
+      dashboard_title: "ORDER DN IKK - INDAH KIAT KARAWANG",
+      footer_text: "© 2024 Indah Kiat Karawang",
+      primary_color: "#4f46e5",
+      background_color: "#eff6ff",
+      text_color: "#1f2937",
+      card_color: "#ffffff",
+      accent_color: "#10b981",
+      sender_email: "",
+      recipient_email: ""
+    };
+
     let currentMonth = new Date();
-    let selectedDate = new Date();
-    let isEditing = false;
-    let currentEditIndex = -1;
-    let currentTheme = 'pink';
-    let dailyTargetChartInstance = null; // Chart.js instance
-
-    const themes = {
-        pink: {
-            background_color: '#FFB6C1',
-            primary_action_color: '#FF8FA3',
-            secondary_action_color: '#A8E6CF',
-            chart_bu17: 'rgba(255, 143, 163, 0.8)',
-            chart_cmi: 'rgba(168, 230, 207, 0.8)'
-        },
-        mint: {
-            background_color: '#A8E6CF',
-            primary_action_color: '#7ED9B3',
-            secondary_action_color: '#FFB6C1',
-            chart_bu17: 'rgba(255, 182, 193, 0.8)',
-            chart_cmi: 'rgba(126, 217, 179, 0.8)'
-        },
-        lavender: {
-            background_color: '#D4A5D4',
-            primary_action_color: '#B794C8',
-            secondary_action_color: '#A8E6CF',
-            chart_bu17: 'rgba(183, 148, 200, 0.8)',
-            chart_cmi: 'rgba(168, 230, 207, 0.8)'
-        },
-        peach: {
-            background_color: '#FFD4A3',
-            primary_action_color: '#FFBC7D',
-            secondary_action_color: '#B4D7FF',
-            chart_bu17: 'rgba(255, 188, 125, 0.8)',
-            chart_cmi: 'rgba(180, 215, 255, 0.8)'
-        },
-        sky: {
-            background_color: '#B4D7FF',
-            primary_action_color: '#8FC1FF',
-            secondary_action_color: '#FFB6C1',
-            chart_bu17: 'rgba(143, 193, 255, 0.8)',
-            chart_cmi: 'rgba(255, 182, 193, 0.8)'
-        },
-        lemon: {
-            background_color: '#FFF9A3',
-            primary_action_color: '#FFE97D',
-            secondary_action_color: '#A8E6CF',
-            chart_bu17: 'rgba(255, 233, 125, 0.8)',
-            chart_cmi: 'rgba(168, 230, 207, 0.8)'
-        }
+    let chartType = 'bar';
+    let allOrders = [];
+    let emailAddressList = [];
+    let customCustomers = { bu17: [], cmi: [] };
+    let emailSettings = {
+      sender: '',
+      recipient: ''
     };
-
-    // --- DOM Elements ---
-    const tableBody = document.getElementById('tableBody');
-    const emptyState = document.getElementById('emptyState');
-    const loadingElement = document.getElementById('loading');
-    const addOrderForm = document.getElementById('addOrderForm');
-    const editOrderForm = document.getElementById('editOrderForm');
-    const editModal = document.getElementById('editModal');
-    const printModal = document.getElementById('printModal');
-    const printPreview = document.getElementById('printPreview');
-    const totalBU17El = document.getElementById('totalBU17');
-    const totalCMIEI = document.getElementById('totalCMI');
-    const totalAllEl = document.getElementById('totalAll');
-    const calendarGrid = document.getElementById('calendarGrid');
-    const calendarMonthEl = document.getElementById('calendarMonth');
-    const prevMonthBtn = document.getElementById('prevMonth');
-    const nextMonthBtn = document.getElementById('nextMonth');
-    const searchInput = document.getElementById('searchInput');
-    const filterMonth = document.getElementById('filterMonth');
-    const filterDate = document.getElementById('filterDate');
-    const filterType = document.getElementById('filterType');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const downloadDropdown = document.getElementById('downloadDropdown');
-    const downloadOptions = document.querySelectorAll('.download-option');
-    const printBtn = document.getElementById('printBtn');
-    const toast = document.getElementById('toast');
-
-    // --- Utility Functions ---
-
-    /**
-     * Converts a Date object to a 'YYYY-MM-DD' string.
-     */
-    const formatDate = (date) => {
-        const d = new Date(date);
-        let month = '' + (d.getMonth() + 1);
-        let day = '' + d.getDate();
-        const year = d.getFullYear();
-
-        if (month.length < 2) month = '0' + month;
-        if (day.length < 2) day = '0' + day;
-
-        return [year, month, day].join('-');
-    };
-
-    /**
-     * Helper to convert hex to RGB for boxShadow opacity.
-     */
-    const hexToRgb = (hex) => {
-        const bigint = parseInt(hex.slice(1), 16);
-        const r = (bigint >> 16) & 255;
-        const g = (bigint >> 8) & 255;
-        const b = bigint & 255;
-        return `${r}, ${g}, ${b}`;
-    };
-
-    /**
-     * Shows a toast notification.
-     */
-    const showToast = (message, type = 'success') => {
-        toast.textContent = message;
-        toast.className = `toast active ${type}`;
-        setTimeout(() => {
-            toast.classList.remove('active');
-        }, 3000);
-    };
-
-    // --- Data Operations (CRUD) ---
-
-    /**
-     * Loads orders from data_sdk (simulating backend/local storage).
-     */
-    const loadOrders = async () => {
-        loadingElement.classList.add('active');
-        try {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            orders = await Data.get('dn_orders') || [];
-        } catch (error) {
-            console.error('Error loading orders:', error);
-            showToast('Failed to load orders.', 'error');
-        } finally {
-            loadingElement.classList.remove('active');
-            // Re-render all components after load
-            renderOrders();
-            updateStats();
-            generateCalendar(currentMonth);
-            populateFilters();
-            renderDailyTargetChart();
-            changeTheme(currentTheme); // Apply initial theme
-        }
-    };
-
-    /**
-     * Saves orders to data_sdk and updates all relevant UI components.
-     */
-    const saveOrders = async () => {
-        try {
-            await Data.set('dn_orders', orders);
-            updateStats();
-            generateCalendar(currentMonth);
-            populateFilters();
-            renderDailyTargetChart(); // Update chart on data change
-        } catch (error) {
-            console.error('Error saving orders:', error);
-            showToast('Failed to save orders.', 'error');
-        }
-    };
-
-    /**
-     * Adds a new order.
-     */
-    const addOrder = (e) => {
-        e.preventDefault();
-        const newOrder = {
-            id: Date.now(),
-            date: document.getElementById('dateInput').value,
-            type: document.getElementById('orderType').value,
-            customer: document.getElementById('customerName').value.trim(),
-            destination: document.getElementById('destination').value.trim(),
-            target: parseFloat(document.getElementById('targetDN').value),
-        };
-
-        if (newOrder.date && newOrder.type && newOrder.customer && newOrder.destination && !isNaN(newOrder.target)) {
-            orders.push(newOrder);
-            saveOrders();
-            renderOrders();
-            addOrderForm.reset();
-            showToast('Order added successfully!');
-        } else {
-            showToast('Please fill all fields correctly.', 'error');
-        }
-    };
-
-    /**
-     * Opens the edit modal and pre-fills data.
-     */
-    window.openEditModal = (id) => {
-        const index = orders.findIndex(order => order.id === id);
-        if (index === -1) return showToast('Order not found!', 'error');
-
-        isEditing = true;
-        currentEditIndex = index;
-        const order = orders[index];
-
-        document.getElementById('editDate').value = order.date;
-        document.getElementById('editOrderType').value = order.type;
-        document.getElementById('editCustomerName').value = order.customer;
-        document.getElementById('editDestination').value = order.destination;
-        document.getElementById('editTargetDN').value = order.target.toFixed(2);
-
-        editModal.classList.add('active');
-    };
-
-    /**
-     * Closes the edit modal.
-     */
-    window.closeEditModal = () => {
-        isEditing = false;
-        currentEditIndex = -1;
-        editModal.classList.remove('active');
-    };
-
-    /**
-     * Updates an existing order.
-     */
-    const updateOrder = (e) => {
-        e.preventDefault();
-        if (currentEditIndex === -1) return;
-
-        const updatedOrder = {
-            id: orders[currentEditIndex].id,
-            date: document.getElementById('editDate').value,
-            type: document.getElementById('editOrderType').value,
-            customer: document.getElementById('editCustomerName').value.trim(),
-            destination: document.getElementById('editDestination').value.trim(),
-            target: parseFloat(document.getElementById('editTargetDN').value),
-        };
-
-        if (updatedOrder.date && updatedOrder.type && updatedOrder.customer && updatedOrder.destination && !isNaN(updatedOrder.target)) {
-            orders[currentEditIndex] = updatedOrder;
-            saveOrders();
-            renderOrders();
-            closeEditModal();
-            showToast('Order updated successfully!');
-        } else {
-            showToast('Please fill all fields correctly.', 'error');
-        }
-    };
-
-    /**
-     * Deletes an order.
-     */
-    window.deleteOrder = (id) => {
-        if (confirm('Are you sure you want to delete this order?')) {
-            const initialLength = orders.length;
-            orders = orders.filter(order => order.id !== id);
-            if (orders.length < initialLength) {
-                saveOrders();
-                renderOrders();
-                showToast('Order deleted successfully!');
-            } else {
-                showToast('Order not found.', 'error');
-            }
-        }
-    };
-
-    // --- Filtering & Rendering ---
-
-    /**
-     * Applies current filters to the orders array.
-     */
-    const getFilteredOrders = () => {
-        const searchText = searchInput.value.toLowerCase();
-        const monthFilter = filterMonth.value;
-        const dateFilter = filterDate.value;
-        const typeFilter = filterType.value;
-
-        return orders.filter(order => {
-            const orderDate = new Date(order.date);
-            const orderMonthYear = `${orderDate.getFullYear()}-${orderDate.getMonth()}`;
-            const orderDay = orderDate.getDate().toString();
-
-            const matchesSearch = searchText === '' ||
-                order.customer.toLowerCase().includes(searchText) ||
-                order.destination.toLowerCase().includes(searchText) ||
-                order.type.toLowerCase().includes(searchText);
-
-            const matchesMonth = monthFilter === '' || orderMonthYear === monthFilter;
-            const matchesDate = dateFilter === '' || orderDay === dateFilter;
-            const matchesType = typeFilter === '' || order.type === typeFilter;
-
-            return matchesSearch && matchesMonth && matchesDate && matchesType;
-        });
-    };
-
-    /**
-     * Renders the orders table with grouping and totals.
-     */
-    const renderOrders = () => {
-        const filteredOrders = getFilteredOrders();
-        tableBody.innerHTML = '';
-
-        if (filteredOrders.length === 0) {
-            emptyState.style.display = 'block';
-            renderDailyTargetChart(); 
-            return;
-        }
-
-        emptyState.style.display = 'none';
-
-        // Grouping logic: Group by Type, then by Date
-        const groupedByType = filteredOrders.reduce((acc, order) => {
-            acc[order.type] = acc[order.type] || [];
-            acc[order.type].push(order);
-            return acc;
-        }, {});
-
-        let grandTotal = 0;
-
-        for (const type in groupedByType) {
-            // Type Header Row
-            const typeHeader = tableBody.insertRow();
-            typeHeader.className = 'group-header';
-            typeHeader.innerHTML = `<td colspan="6">Order Type: <span class="badge badge-${type.toLowerCase().replace(' ', '')}">${type}</span></td>`;
-
-            const ordersByType = groupedByType[type];
-            let typeSubtotal = 0;
-
-            // Group by Date within Type
-            const groupedByDate = ordersByType.reduce((acc, order) => {
-                acc[order.date] = acc[order.date] || [];
-                acc[order.date].push(order);
-                return acc;
-            }, {});
-
-            for (const date in groupedByDate) {
-                let dateSubtotal = 0;
-
-                // Date Subtotal Row (as a group header for date)
-                const dateHeader = tableBody.insertRow();
-                dateHeader.className = 'subtotal-row';
-                dateHeader.innerHTML = `<td colspan="6" style="padding-left: 20px; font-style: italic; background: #EBF8FF;">Date: ${date}</td>`;
-
-                groupedByDate[date].forEach(order => {
-                    const row = tableBody.insertRow();
-                    row.innerHTML = `
-                        <td>${order.date}</td>
-                        <td><span class="badge badge-${order.type.toLowerCase().replace(' ', '')}">${order.type}</span></td>
-                        <td>${order.customer}</td>
-                        <td>${order.destination}</td>
-                        <td>${order.target.toFixed(2)}</td>
-                        <td>
-                            <button class="btn btn-edit" onclick="openEditModal(${order.id})">✏️ Edit</button>
-                            <button class="btn btn-danger" onclick="deleteOrder(${order.id})">🗑️ Delete</button>
-                        </td>
-                    `;
-                    dateSubtotal += order.target;
-                });
-
-                // Display Date Subtotal
-                const dateSubtotalRow = tableBody.insertRow();
-                dateSubtotalRow.className = 'subtotal-row';
-                dateSubtotalRow.innerHTML = `
-                    <td colspan="4" style="text-align: right; padding-right: 12px; font-style: italic;">Subtotal Target for ${date}:</td>
-                    <td><strong>${dateSubtotal.toFixed(2)}</strong></td>
-                    <td></td>
-                `;
-
-                typeSubtotal += dateSubtotal;
-            }
-
-            // Display Type Subtotal
-            const typeSubtotalRow = tableBody.insertRow();
-            typeSubtotalRow.className = 'subtotal-row';
-            typeSubtotalRow.style.background = '#FFECF2';
-            typeSubtotalRow.innerHTML = `
-                <td colspan="4" style="text-align: right; padding-right: 12px;">Total Target for ${type}:</td>
-                <td><strong>${typeSubtotal.toFixed(2)}</strong></td>
-                <td></td>
-            `;
-
-            grandTotal += typeSubtotal;
-        }
-
-        // Display Grand Total
-        const grandTotalRow = tableBody.insertRow();
-        grandTotalRow.className = 'group-header';
-        grandTotalRow.style.fontSize = '1.1em';
-        grandTotalRow.style.background = 'linear-gradient(135deg, #FFD4A3 0%, #FFBC7D 100%)';
-        grandTotalRow.innerHTML = `
-            <td colspan="4" style="text-align: right; padding-right: 12px; color: #2D3748;">GRAND TOTAL TARGET:</td>
-            <td style="color: #2D3748;"><strong>${grandTotal.toFixed(2)}</strong></td>
-            <td></td>
-        `;
-        
-        renderDailyTargetChart(); // Render chart after table
-    };
-
-    /**
-     * Populates the month and date filter dropdowns dynamically.
-     */
-    const populateFilters = () => {
-        // Month Filter
-        const months = [...new Set(orders.map(order => {
-            const date = new Date(order.date);
-            return `${date.getFullYear()}-${date.getMonth()}`;
-        }))].sort();
-
-        filterMonth.innerHTML = '<option value="">All Months</option>';
-        months.forEach(monthKey => {
-            const [year, monthIndex] = monthKey.split('-').map(Number);
-            const date = new Date(year, monthIndex, 1);
-            const monthName = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-            const option = document.createElement('option');
-            option.value = monthKey;
-            option.textContent = monthName;
-            filterMonth.appendChild(option);
-        });
-
-        // Date Filter (populates based on current month/data)
-        const dates = [...new Set(orders.map(order => new Date(order.date).getDate().toString()))].sort((a, b) => parseInt(a) - parseInt(b));
-
-        filterDate.innerHTML = '<option value="">All Dates</option>';
-        dates.forEach(date => {
-            const option = document.createElement('option');
-            option.value = date;
-            option.textContent = `Day ${date}`;
-            filterDate.appendChild(option);
-        });
-    };
-
-    // --- Statistics ---
-
-    /**
-     * Updates the summary statistics cards.
-     */
-    const updateStats = () => {
-        const bu17Total = orders
-            .filter(order => order.type === 'BU 17')
-            .reduce((sum, order) => sum + order.target, 0);
-
-        const cmiTotal = orders
-            .filter(order => order.type === 'CMI')
-            .reduce((sum, order) => sum + order.target, 0);
-
-        const totalAll = bu17Total + cmiTotal;
-
-        totalBU17El.textContent = bu17Total.toFixed(2);
-        totalCMIEI.textContent = cmiTotal.toFixed(2);
-        totalAllEl.textContent = totalAll.toFixed(2);
+    let isOnline = navigator.onLine;
+    let pendingSync = [];
+    
+    // Offline Storage Manager
+    const OfflineStorage = {
+      save: (key, data) => {
+        localStorage.setItem(key, JSON.stringify(data));
+      },
+      load: (key) => {
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : null;
+      },
+      savePendingSync: (operation) => {
+        pendingSync.push(operation);
+        localStorage.setItem('pendingSync', JSON.stringify(pendingSync));
+      },
+      loadPendingSync: () => {
+        const data = localStorage.getItem('pendingSync');
+        pendingSync = data ? JSON.parse(data) : [];
+        return pendingSync;
+      },
+      clearPendingSync: () => {
+        pendingSync = [];
+        localStorage.removeItem('pendingSync');
+      }
     };
     
-    // --- Charting ---
-
-    /**
-     * Renders a bar chart comparing daily targets by order type.
-     */
-    const renderDailyTargetChart = () => {
-        const filteredOrders = getFilteredOrders();
-        const theme = themes[currentTheme];
-
-        // 1. Group data by date and type
-        const dataByDateAndType = filteredOrders.reduce((acc, order) => {
-            acc[order.date] = acc[order.date] || { 'BU 17': 0, 'CMI': 0 };
-            acc[order.date][order.type] += order.target;
-            return acc;
-        }, {});
-
-        // 2. Prepare Chart Data
-        const dates = Object.keys(dataByDateAndType).sort();
-        const bu17Targets = dates.map(date => dataByDateAndType[date]['BU 17']);
-        const cmiTargets = dates.map(date => dataByDateAndType[date]['CMI']);
-        
-        // 3. Destroy old instance if exists
-        if (dailyTargetChartInstance) {
-            dailyTargetChartInstance.destroy();
+    // Update online status indicator
+    function updateOnlineStatus() {
+      isOnline = navigator.onLine;
+      const indicator = document.getElementById('offlineIndicator');
+      
+      if (isOnline) {
+        indicator.className = 'offline-indicator online no-print';
+        indicator.innerHTML = '🟢 Online';
+        syncPendingOperations();
+      } else {
+        indicator.className = 'offline-indicator offline no-print';
+        indicator.innerHTML = '🔴 Offline - Auto-saving locally';
+      }
+    }
+    
+    // Sync pending operations when back online
+    async function syncPendingOperations() {
+      if (!isOnline || pendingSync.length === 0) return;
+      
+      const indicator = document.getElementById('offlineIndicator');
+      indicator.className = 'offline-indicator syncing no-print';
+      indicator.innerHTML = '🔄 Syncing...';
+      
+      const operations = [...pendingSync];
+      OfflineStorage.clearPendingSync();
+      
+      for (const op of operations) {
+        try {
+          if (op.type === 'create') {
+            await window.dataSdk.create(op.data);
+          } else if (op.type === 'update') {
+            await window.dataSdk.update(op.data);
+          } else if (op.type === 'delete') {
+            await window.dataSdk.delete(op.data);
+          }
+        } catch (error) {
+          console.error('Sync failed:', error);
+          OfflineStorage.savePendingSync(op);
         }
+      }
+      
+      updateOnlineStatus();
+      showToast('✓ Data synced successfully!', 'success');
+    }
+    
+    // Listen to online/offline events
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
 
-        // 4. Get context and Render Chart
-        const ctx = document.getElementById('dailyTargetChart').getContext('2d');
-        
-        dailyTargetChartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: dates, // Dates on the X-axis
-                datasets: [
-                    {
-                        label: 'Target BU 17 (MT)',
-                        data: bu17Targets,
-                        backgroundColor: theme.chart_bu17, 
-                        borderColor: theme.primary_action_color,
-                        borderWidth: 1
-                    },
-                    {
-                        label: 'Target CMI (MT)',
-                        data: cmiTargets,
-                        backgroundColor: theme.chart_cmi, 
-                        borderColor: theme.secondary_action_color,
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        stacked: false, 
-                        title: {
-                            display: true,
-                            text: 'Date'
-                        }
-                    },
-                    y: {
-                        stacked: false, 
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Target DN (MT)'
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    title: {
-                        display: false,
-                    }
-                }
-            }
-        });
-    };
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+      toast.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-pulse`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
 
-    // --- Calendar Functions ---
+    function sendEmailNotification(orderData) {
+      if (!emailSettings.sender || !emailSettings.recipient) return;
+      
+      const subject = `New Order Created - ${orderData.customer_name}`;
+      const body = `
+Order Details:
+------------------
+Customer: ${orderData.customer_name}
+Destination: ${orderData.destination}
+Business Unit: ${orderData.business_unit}
+DN Target: ${orderData.dn_target} MT
+Order Date: ${new Date(orderData.order_date).toLocaleDateString()}
+Created: ${new Date(orderData.created_at).toLocaleString()}
 
-    /**
-     * Gets orders grouped by date for the calendar view.
-     */
-    const getOrdersByDateInMonth = (date) => {
-        const month = date.getMonth();
-        const year = date.getFullYear();
+This is an automated notification from IKK Order DN Tracker.
+      `.trim();
+      
+      const mailtoLink = `mailto:${emailSettings.recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(mailtoLink, '_blank');
+      
+      showToast('📧 Email notification opened!', 'info');
+    }
 
-        return orders.reduce((acc, order) => {
-            const orderDate = new Date(order.date);
-            if (orderDate.getMonth() === month && orderDate.getFullYear() === year) {
-                const dateKey = formatDate(orderDate);
-                acc[dateKey] = (acc[dateKey] || 0) + 1;
-            }
-            return acc;
-        }, {});
-    };
+    function loadCustomCustomers() {
+      const saved = localStorage.getItem('customCustomers');
+      if (saved) {
+        customCustomers = JSON.parse(saved);
+      }
+      renderCustomerList();
+    }
 
-    /**
-     * Generates and renders the calendar grid.
-     */
-    const generateCalendar = (date) => {
-        calendarGrid.innerHTML = '';
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const today = formatDate(new Date());
-        const ordersByDate = getOrdersByDateInMonth(date);
+    function saveCustomCustomers() {
+      localStorage.setItem('customCustomers', JSON.stringify(customCustomers));
+    }
 
-        calendarMonthEl.textContent = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-
-        // Day Headers
-        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        dayNames.forEach(day => {
-            const dayHeader = document.createElement('div');
-            dayHeader.className = 'calendar-day-header';
-            dayHeader.textContent = day;
-            calendarGrid.appendChild(dayHeader);
-        });
-
-        // Calculate start and end days
-        const firstDayOfMonth = new Date(year, month, 1);
-        const lastDayOfMonth = new Date(year, month + 1, 0);
-        const startDayOfWeek = firstDayOfMonth.getDay(); // 0 for Sunday, 6 for Saturday
-        const totalDays = lastDayOfMonth.getDate();
-
-        // Previous Month's filler days
-        const prevMonth = new Date(year, month, 0);
-        const daysInPrevMonth = prevMonth.getDate();
-
-        for (let i = 0; i < startDayOfWeek; i++) {
-            const day = document.createElement('div');
-            day.className = 'calendar-day other-month';
-            day.innerHTML = `<span class="calendar-day-number">${daysInPrevMonth - startDayOfWeek + i + 1}</span>`;
-            calendarGrid.appendChild(day);
-        }
-
-        // Current Month's days
-        for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
-            const dateStr = formatDate(new Date(year, month, dayNum));
-            const dayEl = document.createElement('div');
-            dayEl.className = 'calendar-day';
-            dayEl.dataset.date = dateStr;
-            dayEl.onclick = () => selectDate(dateStr);
-
-            const isWeekend = new Date(year, month, dayNum).getDay() % 6 === 0;
-
-            if (isWeekend) dayEl.classList.add('weekend');
-            if (dateStr === today) dayEl.classList.add('today');
-            if (formatDate(selectedDate) === dateStr) dayEl.classList.add('selected');
-
-            if (ordersByDate[dateStr]) {
-                dayEl.classList.add('has-orders');
-                dayEl.innerHTML = `
-                    <span class="calendar-day-number">${dayNum}</span>
-                    <span class="calendar-day-count">${ordersByDate[dateStr]} Orders</span>
-                `;
-            } else {
-                dayEl.innerHTML = `<span class="calendar-day-number">${dayNum}</span>`;
-            }
-            calendarGrid.appendChild(dayEl);
-        }
-
-        // Next Month's filler days
-        const totalCells = startDayOfWeek + totalDays;
-        const remainingCells = 42 - totalCells; 
-
-        for (let i = 1; i <= remainingCells; i++) {
-            const day = document.createElement('div');
-            day.className = 'calendar-day other-month';
-            day.innerHTML = `<span class="calendar-day-number">${i}</span>`;
-            calendarGrid.appendChild(day);
-        }
-    };
-
-    /**
-     * Navigates the calendar to the previous month.
-     */
-    const prevMonth = () => {
-        currentMonth.setMonth(currentMonth.getMonth() - 1);
-        generateCalendar(currentMonth);
-    };
-
-    /**
-     * Navigates the calendar to the next month.
-     */
-    const nextMonth = () => {
-        currentMonth.setMonth(currentMonth.getMonth() + 1);
-        generateCalendar(currentMonth);
-    };
-
-    /**
-     * Selects a date in the calendar and sets the filter.
-     */
-    const selectDate = (dateStr) => {
-        selectedDate = new Date(dateStr);
-        const year = selectedDate.getFullYear();
-        const month = selectedDate.getMonth();
-        const day = selectedDate.getDate().toString();
-
-        const monthKey = `${year}-${month}`;
-        filterMonth.value = monthKey;
-        filterDate.value = day;
-
-        renderOrders();
-        generateCalendar(currentMonth); 
-    };
-
-    // --- Theme Switching ---
-
-    /**
-     * Changes the dashboard's color theme.
-     */
-    window.changeTheme = (themeName) => {
-        const theme = themes[themeName];
-        if (!theme) return;
-        currentTheme = themeName;
-
-        const style = document.createElement('style');
-        style.type = 'text/css';
-        style.innerHTML = `
-            .dashboard-container { background: linear-gradient(135deg, ${theme.background_color} 0%, #E5F3FF 100%) !important; }
-            .calendar-nav-btn, .calendar-day.today, .data-table thead, .data-table thead th, .btn-primary { 
-                background: linear-gradient(135deg, ${theme.background_color} 0%, ${theme.primary_action_color} 100%) !important;
-                border-color: ${theme.primary_action_color} !important;
-            }
-            .calendar-day.today { box-shadow: 0 4px 12px rgba(${hexToRgb(theme.background_color)}, 0.5) !important; }
-            .stat-card.bu17 { border-left-color: ${theme.primary_action_color} !important; }
-            .stat-card.cmi { border-left-color: ${theme.secondary_action_color} !important; }
-            .form-input:focus, .form-select:focus { border-color: ${theme.background_color} !important; box-shadow: 0 0 0 3px rgba(${hexToRgb(theme.background_color)}, 0.2) !important; }
+    function renderCustomerList() {
+      const list = document.getElementById('customCustomerList');
+      list.innerHTML = '';
+      
+      const allCustomCustomers = [...customCustomers.bu17, ...customCustomers.cmi];
+      
+      if (allCustomCustomers.length === 0) {
+        list.innerHTML = '<p class="text-gray-500 text-sm">No custom customers added yet.</p>';
+        return;
+      }
+      
+      allCustomCustomers.forEach((customer, index) => {
+        const div = document.createElement('div');
+        div.className = 'flex justify-between items-center bg-white p-2 rounded border border-gray-200';
+        div.innerHTML = `
+          <div class="flex-1">
+            <p class="text-sm font-semibold">${customer.name}</p>
+            <p class="text-xs text-gray-600">${customer.destination} - <span class="font-semibold ${customer.bu === 'BU 17' ? 'text-blue-600' : 'text-green-600'}">${customer.bu}</span></p>
+          </div>
+          <button onclick="removeCustomCustomer('${customer.bu}', '${customer.name}', '${customer.destination}')" class="text-red-500 hover:text-red-700 text-sm ml-2">✕</button>
         `;
-        document.head.appendChild(style);
+        list.appendChild(div);
+      });
+    }
 
-        document.querySelectorAll('.theme-card').forEach(card => card.classList.remove('active'));
-        document.querySelector(`.theme-card[data-theme="${themeName}"]`).classList.add('active');
+    // ========================================
+    // FUNGSI HAPUS CUSTOM CUSTOMER
+    // ========================================
+    window.removeCustomCustomer = function(bu, name, destination) {
+      // Tentukan array key berdasarkan Business Unit
+      const arrayKey = bu === 'BU 17' ? 'bu17' : 'cmi';
+      
+      // Filter dan hapus customer yang sesuai
+      customCustomers[arrayKey] = customCustomers[arrayKey].filter(c => 
+        !(c.name === name && c.destination === destination)
+      );
+      
+      // Simpan perubahan ke localStorage
+      saveCustomCustomers();
+      
+      // Update tampilan list customer
+      renderCustomerList();
+      
+      // Tampilkan notifikasi sukses
+      showToast('✓ Customer berhasil dihapus!', 'success');
+    };
+
+    function getAllCustomers(bu) {
+      const baseCustomers = bu === 'BU 17' ? BU17_CUSTOMERS : CMI_CUSTOMERS;
+      const customList = bu === 'BU 17' ? customCustomers.bu17 : customCustomers.cmi;
+      return [...baseCustomers, ...customList];
+    }
+
+    function loadEmailAddresses() {
+      const saved = localStorage.getItem('emailAddressList');
+      if (saved) {
+        emailAddressList = JSON.parse(saved);
+      }
+      renderEmailAddressList();
+    }
+
+    function saveEmailAddresses() {
+      localStorage.setItem('emailAddressList', JSON.stringify(emailAddressList));
+    }
+
+    function renderEmailAddressList() {
+      const list = document.getElementById('emailAddressList');
+      list.innerHTML = '';
+      
+      if (emailAddressList.length === 0) {
+        list.innerHTML = '<p class="text-gray-500 text-sm">No email addresses added yet.</p>';
+        return;
+      }
+      
+      emailAddressList.forEach((email, index) => {
+        const div = document.createElement('div');
+        div.className = 'flex justify-between items-center bg-white p-2 rounded border border-gray-200';
+        div.innerHTML = `
+          <span class="text-sm">📧 ${email}</span>
+          <button onclick="removeEmailAddress(${index})" class="text-red-500 hover:text-red-700 text-sm ml-2">✕</button>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    // ========================================
+    // FUNGSI HAPUS EMAIL ADDRESS
+    // ========================================
+    window.removeEmailAddress = function(index) {
+      // Hapus email dari array berdasarkan index
+      emailAddressList.splice(index, 1);
+      
+      // Simpan perubahan ke localStorage
+      saveEmailAddresses();
+      
+      // Update tampilan list email
+      renderEmailAddressList();
+      
+      // Tampilkan notifikasi sukses
+      showToast('✓ Email address berhasil dihapus!', 'success');
+    };
+
+    function calculateDNTarget(value) {
+      const num = parseInt(value);
+      
+      if (num <= 20) return 20;
+      if (num <= 22) return 20;
+      if (num <= 25) return 25;
+      if (num <= 27) return 30;
+      return Math.ceil(num / 5) * 5;
+    }
+
+    document.getElementById('dnInput').addEventListener('input', (e) => {
+      const calculated = calculateDNTarget(e.target.value);
+      document.getElementById('calculatedTarget').textContent = calculated;
+    });
+
+    document.getElementById('businessUnit').addEventListener('change', (e) => {
+      const bu = e.target.value;
+      const customerSelect = document.getElementById('customerSelect');
+      customerSelect.innerHTML = '<option value="">Select Customer</option>';
+      
+      const customers = getAllCustomers(bu);
+      customers.forEach(customer => {
+        const option = document.createElement('option');
+        option.value = JSON.stringify(customer);
+        option.textContent = `${customer.name} - ${customer.destination}`;
+        customerSelect.appendChild(option);
+      });
+    });
+
+    document.getElementById('customerSearch').addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const bu = document.getElementById('businessUnit').value;
+      const customerSelect = document.getElementById('customerSelect');
+      
+      const customers = getAllCustomers(bu);
+      const filtered = customers.filter(c => 
+        c.name.toLowerCase().includes(searchTerm) || 
+        c.destination.toLowerCase().includes(searchTerm)
+      );
+      
+      customerSelect.innerHTML = '<option value="">Select Customer</option>';
+      filtered.forEach(customer => {
+        const option = document.createElement('option');
+        option.value = JSON.stringify(customer);
+        option.textContent = `${customer.name} - ${customer.destination}`;
+        customerSelect.appendChild(option);
+      });
+    });
+
+    document.getElementById('addCustomCustomer').addEventListener('click', () => {
+      const name = document.getElementById('newCustomerName').value.trim();
+      const destination = document.getElementById('newCustomerDestination').value.trim();
+      const bu = document.getElementById('newCustomerBU').value;
+      
+      if (!name || !destination || !bu) {
+        showToast('⚠️ Please fill all fields!', 'error');
+        return;
+      }
+      
+      const arrayKey = bu === 'BU 17' ? 'bu17' : 'cmi';
+      const allCustomers = getAllCustomers(bu);
+      
+      const duplicate = allCustomers.find(c => 
+        c.name.toLowerCase() === name.toLowerCase() && 
+        c.destination.toLowerCase() === destination.toLowerCase()
+      );
+      
+      if (duplicate) {
+        showToast('⚠️ Customer already exists!', 'error');
+        return;
+      }
+      
+      customCustomers[arrayKey].push({ name, destination, bu });
+      saveCustomCustomers();
+      renderCustomerList();
+      
+      document.getElementById('newCustomerName').value = '';
+      document.getElementById('newCustomerDestination').value = '';
+      document.getElementById('newCustomerBU').value = '';
+      
+      showToast('✓ Customer added successfully!', 'success');
+    });
+
+    document.getElementById('addEmailAddress').addEventListener('click', () => {
+      const email = document.getElementById('newEmailAddress').value.trim();
+      
+      if (!email) {
+        showToast('⚠️ Please enter an email address!', 'error');
+        return;
+      }
+      
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        showToast('⚠️ Please enter a valid email address!', 'error');
+        return;
+      }
+      
+      if (emailAddressList.includes(email)) {
+        showToast('⚠️ Email address already exists!', 'error');
+        return;
+      }
+      
+      emailAddressList.push(email);
+      saveEmailAddresses();
+      renderEmailAddressList();
+      
+      document.getElementById('newEmailAddress').value = '';
+      
+      showToast('✓ Email address added successfully!', 'success');
+    });
+
+    function renderCalendar() {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      document.getElementById('currentMonth').textContent = 
+        currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+      
+      for (let i = 0; i < firstDay; i++) {
+        const emptyDay = document.createElement('div');
+        emptyDay.className = 'calendar-day';
+        grid.appendChild(emptyDay);
+      }
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayDate = new Date(year, month, day);
+        const dayOfWeek = dayDate.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const dateStr = dayDate.toISOString().split('T')[0];
         
-        // Update chart colors instantly
-        if (dailyTargetChartInstance) {
-            dailyTargetChartInstance.data.datasets[0].backgroundColor = theme.chart_bu17;
-            dailyTargetChartInstance.data.datasets[0].borderColor = theme.primary_action_color;
-            dailyTargetChartInstance.data.datasets[1].backgroundColor = theme.chart_cmi;
-            dailyTargetChartInstance.data.datasets[1].borderColor = theme.secondary_action_color;
-            dailyTargetChartInstance.update();
+        const hasOrder = allOrders.some(order => 
+          order.order_date === dateStr && order.completed
+        );
+        
+        const dayDiv = document.createElement('div');
+        dayDiv.className = `calendar-day bg-white rounded-lg p-2 text-center cursor-pointer border-2 ${
+          isWeekend ? 'bg-red-50 border-red-200' : 'border-gray-200'
+        } ${hasOrder ? 'order-completed' : ''}`;
+        dayDiv.innerHTML = `<div class="font-semibold ${isWeekend ? 'text-red-600' : 'text-gray-700'}">${day}</div>`;
+        
+        dayDiv.addEventListener('click', () => {
+          const selectedDate = new Date(year, month, day);
+          const formattedDate = selectedDate.toISOString().split('T')[0];
+          
+          document.getElementById('orderDate').value = formattedDate;
+          document.querySelectorAll('.calendar-day').forEach(d => d.classList.remove('ring-4', 'ring-indigo-500'));
+          dayDiv.classList.add('ring-4', 'ring-indigo-500');
+          showToast(`✓ Tanggal dipilih: ${day} ${currentMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`, 'success');
+        });
+        
+        grid.appendChild(dayDiv);
+      }
+    }
+
+    function updateStats() {
+      const total = allOrders.length;
+      const bu17 = allOrders.filter(o => o.business_unit === 'BU 17').length;
+      const cmi = allOrders.filter(o => o.business_unit === 'CMI').length;
+      
+      const bu17Total = allOrders.filter(o => o.business_unit === 'BU 17').reduce((sum, o) => sum + o.dn_target, 0);
+      const cmiTotal = allOrders.filter(o => o.business_unit === 'CMI').reduce((sum, o) => sum + o.dn_target, 0);
+      const totalDN = allOrders.reduce((sum, o) => sum + o.dn_target, 0);
+      
+      const currentMonthOrders = allOrders.filter(o => {
+        const orderDate = new Date(o.order_date);
+        return orderDate.getMonth() === new Date().getMonth() && 
+               orderDate.getFullYear() === new Date().getFullYear();
+      }).length;
+      
+      document.getElementById('totalOrders').textContent = total;
+      document.getElementById('bu17Orders').textContent = bu17;
+      document.getElementById('cmiOrders').textContent = cmi;
+      document.getElementById('bu17Total').textContent = bu17Total;
+      document.getElementById('cmiTotal').textContent = cmiTotal;
+      document.getElementById('totalDN').textContent = totalDN;
+      document.getElementById('monthOrders').textContent = currentMonthOrders;
+    }
+
+    function renderOrderTable() {
+      const tbody = document.getElementById('orderTableBody');
+      const searchTerm = document.getElementById('searchOrder').value.toLowerCase();
+      const filterMonth = document.getElementById('filterMonth').value;
+      
+      let filtered = allOrders;
+      
+      if (searchTerm) {
+        filtered = filtered.filter(o => 
+          o.customer_name.toLowerCase().includes(searchTerm) ||
+          o.destination.toLowerCase().includes(searchTerm)
+        );
+      }
+      
+      if (filterMonth) {
+        filtered = filtered.filter(o => o.order_date.startsWith(filterMonth));
+      }
+      
+      // Group by Business Unit
+      const bu17Orders = filtered.filter(o => o.business_unit === 'BU 17');
+      const cmiOrders = filtered.filter(o => o.business_unit === 'CMI');
+      
+      // Calculate totals
+      const bu17Total = bu17Orders.reduce((sum, o) => sum + o.dn_target, 0);
+      const cmiTotal = cmiOrders.reduce((sum, o) => sum + o.dn_target, 0);
+      const grandTotal = bu17Total + cmiTotal;
+      
+      let tableHTML = '';
+      
+      // BU 17 Section
+      if (bu17Orders.length > 0) {
+        tableHTML += `
+          <tr class="bg-blue-50">
+            <td colspan="6" class="px-4 py-3 text-sm font-bold text-blue-800">
+              📦 BU 17 ORDERS (${bu17Orders.length} orders)
+            </td>
+          </tr>
+        `;
+        
+        tableHTML += bu17Orders.map(order => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm">${new Date(order.order_date).toLocaleDateString()}</td>
+            <td class="px-4 py-3 text-sm font-medium">${order.customer_name}</td>
+            <td class="px-4 py-3 text-sm">${order.destination}</td>
+            <td class="px-4 py-3 text-sm">
+              <span class="px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">${order.business_unit}</span>
+            </td>
+            <td class="px-4 py-3 text-sm font-bold">${order.dn_target} MT</td>
+            <td class="px-4 py-3 text-sm no-print">
+              <button onclick="window.editOrder('${order.__backendId}')" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2">✏️ Edit</button>
+              <button onclick="window.deleteOrder('${order.__backendId}')" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">🗑️ Hapus</button>
+            </td>
+          </tr>
+        `).join('');
+        
+        tableHTML += `
+          <tr class="bg-blue-100 font-bold">
+            <td colspan="4" class="px-4 py-3 text-sm text-blue-900 text-right">TOTAL BU 17:</td>
+            <td class="px-4 py-3 text-sm text-blue-900">${bu17Total} MT</td>
+            <td class="no-print"></td>
+          </tr>
+        `;
+      }
+      
+      // CMI Section
+      if (cmiOrders.length > 0) {
+        tableHTML += `
+          <tr class="bg-green-50">
+            <td colspan="6" class="px-4 py-3 text-sm font-bold text-green-800">
+              📦 CMI ORDERS (${cmiOrders.length} orders)
+            </td>
+          </tr>
+        `;
+        
+        tableHTML += cmiOrders.map(order => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm">${new Date(order.order_date).toLocaleDateString()}</td>
+            <td class="px-4 py-3 text-sm font-medium">${order.customer_name}</td>
+            <td class="px-4 py-3 text-sm">${order.destination}</td>
+            <td class="px-4 py-3 text-sm">
+              <span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">${order.business_unit}</span>
+            </td>
+            <td class="px-4 py-3 text-sm font-bold">${order.dn_target} MT</td>
+            <td class="px-4 py-3 text-sm no-print">
+              <button onclick="window.editOrder('${order.__backendId}')" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2">✏️ Edit</button>
+              <button onclick="window.deleteOrder('${order.__backendId}')" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">🗑️ Hapus</button>
+            </td>
+          </tr>
+        `).join('');
+        
+        tableHTML += `
+          <tr class="bg-green-100 font-bold">
+            <td colspan="4" class="px-4 py-3 text-sm text-green-900 text-right">TOTAL CMI:</td>
+            <td class="px-4 py-3 text-sm text-green-900">${cmiTotal} MT</td>
+            <td class="no-print"></td>
+          </tr>
+        `;
+      }
+      
+      // Grand Total
+      if (filtered.length > 0) {
+        tableHTML += `
+          <tr class="bg-indigo-200 font-bold">
+            <td colspan="4" class="px-4 py-4 text-base text-indigo-900 text-right">🎯 GRAND TOTAL:</td>
+            <td class="px-4 py-4 text-base text-indigo-900">${grandTotal} MT</td>
+            <td class="no-print"></td>
+          </tr>
+        `;
+      }
+      
+      tbody.innerHTML = tableHTML || '<tr><td colspan="6" class="px-4 py-3 text-center text-gray-500">No orders found</td></tr>';
+    }
+
+    // ========================================
+    // VARIABEL UNTUK MENYIMPAN ORDER YANG SEDANG DI-EDIT
+    // ========================================
+    let currentEditingOrder = null;
+
+    // ========================================
+    // FUNGSI UNTUK EDIT ORDER
+    // ========================================
+    // Fungsi ini dipanggil ketika tombol Edit diklik pada tabel order
+    window.editOrder = function(backendId) {
+      // Cari order berdasarkan backendId
+      const order = allOrders.find(o => o.__backendId === backendId);
+      if (!order) return;
+      
+      // Simpan reference order yang sedang di-edit
+      currentEditingOrder = order;
+      
+      // Isi form edit dengan data order yang dipilih
+      document.getElementById('editBusinessUnit').value = order.business_unit;
+      document.getElementById('editCustomerName').value = order.customer_name;
+      document.getElementById('editDestination').value = order.destination;
+      document.getElementById('editDnTarget').value = order.dn_target;
+      document.getElementById('editOrderDate').value = order.order_date;
+      document.getElementById('editCompleted').checked = order.completed;
+      
+      // Tampilkan modal edit
+      document.getElementById('editModal').classList.remove('hidden');
+    };
+
+    // ========================================
+    // FUNGSI UNTUK DELETE ORDER
+    // ========================================
+    // Fungsi ini dipanggil ketika tombol Delete diklik pada tabel order
+    window.deleteOrder = async function(backendId) {
+      // Cari index order berdasarkan backendId atau id
+      const orderIndex = allOrders.findIndex(o => o.__backendId === backendId || o.id === backendId);
+      if (orderIndex === -1) return;
+      
+      // Ambil data order yang akan dihapus
+      const order = allOrders[orderIndex];
+      
+      // ========================================
+      // BUAT DIALOG KONFIRMASI DELETE (INLINE)
+      // ========================================
+      // Kita tidak menggunakan alert() karena tidak didukung di iframe
+      // Kita buat dialog konfirmasi custom menggunakan div
+      const confirmDiv = document.createElement('div');
+      confirmDiv.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      confirmDiv.innerHTML = `
+        <div class="bg-white rounded-lg p-6 max-w-sm">
+          <p class="text-lg mb-4">🗑️ Hapus order ini?</p>
+          <p class="text-sm text-gray-600 mb-4">${order.customer_name}</p>
+          <div class="flex gap-3">
+            <button id="confirmDelete" class="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600">Hapus</button>
+            <button id="cancelDelete" class="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Batal</button>
+          </div>
+        </div>
+      `;
+      
+      // Tampilkan dialog konfirmasi
+      document.body.appendChild(confirmDiv);
+      
+      // ========================================
+      // HANDLER TOMBOL KONFIRMASI DELETE
+      // ========================================
+      document.getElementById('confirmDelete').onclick = async () => {
+        const deleteBtn = document.getElementById('confirmDelete');
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = 'Menghapus...';
+        
+        // Hapus order dari array lokal
+        allOrders.splice(orderIndex, 1);
+        
+        // Simpan perubahan ke localStorage (offline storage)
+        OfflineStorage.save('orders', allOrders);
+        
+        // Update tampilan: stats, tabel, kalender, dan chart
+        updateStats();
+        renderOrderTable();
+        renderCalendar();
+        renderCharts();
+        
+        // ========================================
+        // SINKRONISASI DENGAN DATABASE (ONLINE)
+        // ========================================
+        if (isOnline && order.__backendId) {
+          // Jika online dan order punya backendId, hapus dari database
+          try {
+            const result = await window.dataSdk.delete(order);
+            if (!result.isOk) {
+              // Jika gagal, simpan ke pending sync untuk dicoba lagi nanti
+              OfflineStorage.savePendingSync({ type: 'delete', data: order });
+            }
+          } catch (error) {
+            // Jika error, simpan ke pending sync
+            OfflineStorage.savePendingSync({ type: 'delete', data: order });
+          }
+        } else if (order.__backendId) {
+          // Jika offline tapi order punya backendId, simpan ke pending sync
+          OfflineStorage.savePendingSync({ type: 'delete', data: order });
         }
+        
+        // Tampilkan notifikasi sukses
+        showToast('✓ Order berhasil dihapus!', 'success');
+        
+        // Tutup dan hapus dialog konfirmasi
+        document.body.removeChild(confirmDiv);
+      };
+      
+      // ========================================
+      // HANDLER TOMBOL BATAL DELETE
+      // ========================================
+      document.getElementById('cancelDelete').onclick = () => {
+        // Tutup dialog tanpa menghapus order
+        document.body.removeChild(confirmDiv);
+      };
     };
 
-    // --- Export and Print ---
+    function renderCharts() {
+      renderCustomerChart();
+      renderMonthlyChart();
+    }
 
-    /**
-     * Toggles the download dropdown visibility.
-     */
-    const toggleDownloadDropdown = () => {
-        downloadDropdown.classList.toggle('active');
-    };
+    function renderCustomerChart() {
+      const canvas = document.getElementById('customerChart');
+      const ctx = canvas.getContext('2d');
+      
+      const filterMonth = document.getElementById('chartFilterMonth').value;
+      let filteredOrders = allOrders;
+      
+      if (filterMonth) {
+        filteredOrders = allOrders.filter(o => o.order_date.startsWith(filterMonth));
+      }
+      
+      const customerCounts = {};
+      filteredOrders.forEach(order => {
+        customerCounts[order.customer_name] = (customerCounts[order.customer_name] || 0) + 1;
+      });
+      
+      const sorted = Object.entries(customerCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      const labels = sorted.map(([name]) => name.substring(0, 20) + '...');
+      const data = sorted.map(([, count]) => count);
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      const maxValue = Math.max(...data, 1);
+      const barWidth = canvas.width / data.length - 20;
+      const chartHeight = canvas.height - 60;
+      
+      if (chartType === 'bar') {
+        data.forEach((value, i) => {
+          const barHeight = (value / maxValue) * chartHeight;
+          const x = i * (barWidth + 20) + 10;
+          const y = canvas.height - barHeight - 40;
+          
+          ctx.fillStyle = '#4f46e5';
+          ctx.fillRect(x, y, barWidth, barHeight);
+          
+          ctx.fillStyle = '#1f2937';
+          ctx.font = '10px Inter';
+          ctx.fillText(value.toString(), x + barWidth/2 - 5, y - 5);
+        });
+      } else {
+        ctx.strokeStyle = '#4f46e5';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        data.forEach((value, i) => {
+          const x = i * (canvas.width / (data.length - 1 || 1));
+          const y = canvas.height - 40 - (value / maxValue) * chartHeight;
+          
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          
+          ctx.fillStyle = '#4f46e5';
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.stroke();
+      }
+      
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '9px Inter';
+      labels.forEach((label, i) => {
+        const x = i * (barWidth + 20) + 10;
+        ctx.save();
+        ctx.translate(x + barWidth/2, canvas.height - 10);
+        ctx.rotate(-Math.PI / 4);
+        ctx.fillText(label, 0, 0);
+        ctx.restore();
+      });
+    }
 
-    /**
-     * Hides the download dropdown.
-     */
-    const hideDownloadDropdown = () => {
-        downloadDropdown.classList.remove('active');
-    };
+    function renderMonthlyChart() {
+      const canvas = document.getElementById('monthlyChart');
+      const ctx = canvas.getContext('2d');
+      
+      const monthlyCounts = {};
+      allOrders.forEach(order => {
+        const month = order.order_date.substring(0, 7);
+        monthlyCounts[month] = (monthlyCounts[month] || 0) + 1;
+      });
+      
+      const sorted = Object.entries(monthlyCounts).sort();
+      const labels = sorted.map(([month]) => {
+        const [year, m] = month.split('-');
+        return new Date(year, m - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      });
+      const data = sorted.map(([, count]) => count);
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      const maxValue = Math.max(...data, 1);
+      const barWidth = canvas.width / data.length - 20;
+      const chartHeight = canvas.height - 60;
+      
+      data.forEach((value, i) => {
+        const barHeight = (value / maxValue) * chartHeight;
+        const x = i * (barWidth + 20) + 10;
+        const y = canvas.height - barHeight - 40;
+        
+        ctx.fillStyle = '#10b981';
+        ctx.fillRect(x, y, barWidth, barHeight);
+        
+        ctx.fillStyle = '#1f2937';
+        ctx.font = '12px Inter';
+        ctx.fillText(value.toString(), x + barWidth/2 - 5, y - 5);
+      });
+      
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '10px Inter';
+      labels.forEach((label, i) => {
+        const x = i * (barWidth + 20) + 10;
+        ctx.fillText(label, x, canvas.height - 20);
+      });
+    }
 
-    /**
-     * Handles the download request (Excel, PDF, Image).
-     */
-    const handleDownload = (format) => {
-        const allFilteredOrders = getFilteredOrders();
-        if (allFilteredOrders.length === 0) {
-            return showToast('No data to download.', 'error');
-        }
-
-        switch (format) {
-            case 'excel':
-                exportToExcel(allFilteredOrders);
-                break;
-            case 'pdf':
-                // Note: PDF relies on both jspdf and html2canvas being correctly loaded
-                exportToPDF('data-table-section'); 
-                break;
-            case 'image':
-                exportToImage('data-table-section');
-                break;
-            default:
-                showToast('Unsupported download format.', 'error');
-        }
-        hideDownloadDropdown();
-    };
-
-    /**
-     * Exports data to an Excel (.xlsx) file.
-     */
-    const exportToExcel = (data) => {
-        const worksheetData = data.map(order => ({
-            Date: order.date,
-            Type: order.type,
-            'Customer Name': order.customer,
-            Destination: order.destination,
-            'Target DN (MT)': order.target.toFixed(2),
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'DN_Orders');
-        XLSX.writeFile(workbook, 'DN_Orders_Data.xlsx');
-        showToast('Data exported to Excel successfully!');
-    };
-
-    /**
-     * Generates HTML content for the print preview modal.
-     */
-    const generatePrintContent = () => {
-        const filteredOrders = getFilteredOrders();
-        const theme = themes[currentTheme];
-        const stats = {
-            bu17: filteredOrders.filter(o => o.type === 'BU 17').reduce((sum, o) => sum + o.target, 0).toFixed(2),
-            cmi: filteredOrders.filter(o => o.type === 'CMI').reduce((sum, o) => sum + o.target, 0).toFixed(2),
-            total: filteredOrders.reduce((sum, o) => sum + o.target, 0).toFixed(2),
-        };
-
-        let tableContent = `<table class="data-table" style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr style="background: ${theme.primary_action_color}; color: white;">
-                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Date</th>
-                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Type</th>
-                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Customer Name</th>
-                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Destination</th>
-                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Target DN (MT)</th>
-                </tr>
-            </thead>
-            <tbody>`;
-
-        if (filteredOrders.length === 0) {
-            tableContent += `<tr><td colspan="5" style="text-align: center; padding: 20px;">No orders found for the current filters.</td></tr>`;
+    const dataHandler = {
+      onDataChanged(data) {
+        if (data && data.length > 0) {
+          allOrders = data;
+          OfflineStorage.save('orders', allOrders);
         } else {
-            const grouped = filteredOrders.reduce((acc, order) => {
-                const key = order.type;
-                acc[key] = acc[key] || [];
-                acc[key].push(order);
-                return acc;
-            }, {});
-
-            for (const type in grouped) {
-                let typeTotal = 0;
-                tableContent += `<tr style="background: #FFECF2; font-weight: bold;"><td colspan="5" style="padding: 8px; border: 1px solid #ddd;">Order Type: ${type}</td></tr>`;
-                grouped[type].forEach(order => {
-                    tableContent += `
-                        <tr>
-                            <td style="padding: 8px; border: 1px solid #ddd;">${order.date}</td>
-                            <td style="padding: 8px; border: 1px solid #ddd;">${order.type}</td>
-                            <td style="padding: 8px; border: 1px solid #ddd;">${order.customer}</td>
-                            <td style="padding: 8px; border: 1px solid #ddd;">${order.destination}</td>
-                            <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${order.target.toFixed(2)}</td>
-                        </tr>
-                    `;
-                    typeTotal += order.target;
-                });
-                tableContent += `<tr style="background: #F7FAFC; font-weight: bold;"><td colspan="4" style="text-align: right; padding: 8px; border: 1px solid #ddd;">Total ${type}:</td><td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${typeTotal.toFixed(2)}</td></tr>`;
+          const offlineOrders = OfflineStorage.load('orders');
+          if (offlineOrders) {
+            allOrders = offlineOrders;
+          }
+        }
+        
+        const today = new Date().toISOString().split('T')[0];
+        let hasAutoCompleted = false;
+        
+        allOrders.forEach(order => {
+          if (order.order_date < today && !order.completed) {
+            order.completed = true;
+            if (isOnline) {
+              window.dataSdk.update(order);
+            } else {
+              OfflineStorage.savePendingSync({ type: 'update', data: order });
             }
-        }
-        
-        tableContent += '</tbody></table>';
-
-        printPreview.innerHTML = `
-            <div class="print-header">
-                <div class="print-logo">DN Order Tracking Report</div>
-                <div class="print-subtitle">Filtered Data: ${new Date().toLocaleString()}</div>
-            </div>
-            <div class="print-stats">
-                <div class="print-stat-box">
-                    <div class="print-stat-label">Total Target BU 17</div>
-                    <div class="print-stat-value" style="color: ${theme.primary_action_color};">${stats.bu17} MT</div>
-                </div>
-                <div class="print-stat-box">
-                    <div class="print-stat-label">Total Target CMI</div>
-                    <div class="print-stat-value" style="color: ${theme.secondary_action_color};">${stats.cmi} MT</div>
-                </div>
-                <div class="print-stat-box">
-                    <div class="print-stat-label">Grand Total Target</div>
-                    <div class="print-stat-value">${stats.total} MT</div>
-                </div>
-            </div>
-            <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 18px; font-weight: 700; color: #2D3748;">Order Details:</h3>
-            ${tableContent}
-        `;
-        printModal.classList.add('active');
-    };
-
-    /**
-     * Closes the print preview modal.
-     */
-    window.closePrintModal = () => {
-        printModal.classList.remove('active');
-    };
-
-    /**
-     * Exports an element to a PDF file using jspdf and html2canvas.
-     */
-    const exportToPDF = (elementId) => {
-        const input = document.getElementById(elementId).closest('.data-table-section');
-        const { jsPDF } = window.jspdf;
-        // Check if html2canvas is available (assuming correct CDN link)
-        if (typeof html2canvas === 'undefined' || typeof jsPDF === 'undefined') {
-             return showToast('Export Failed: Missing PDF/Image library (html2canvas/jspdf).', 'error');
-        }
-        
-        html2canvas(input, { scale: 2 }).then((canvas) => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save('DN_Orders_Table.pdf');
-            showToast('Table exported to PDF successfully!');
-        }).catch(error => {
-            console.error('PDF export failed:', error);
-            showToast('PDF export failed. Check console for details.', 'error');
+            hasAutoCompleted = true;
+          }
         });
-    };
-
-    /**
-     * Exports an element to a PNG image using html2canvas.
-     */
-    const exportToImage = (elementId) => {
-        const input = document.getElementById(elementId).closest('.data-table-section');
         
-        // Check if html2canvas is available (assuming correct CDN link)
-        if (typeof html2canvas === 'undefined') {
-             return showToast('Export Failed: Missing Image library (html2canvas).', 'error');
+        if (hasAutoCompleted) {
+          showToast('✓ Past orders auto-completed!', 'success');
+          OfflineStorage.save('orders', allOrders);
         }
-
-        html2canvas(input, { scale: 2 }).then((canvas) => {
-            const link = document.createElement('a');
-            link.href = canvas.toDataURL('image/png');
-            link.download = 'DN_Orders_Table.png';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showToast('Table exported to PNG image successfully!');
-        }).catch(error => {
-            console.error('Image export failed:', error);
-            showToast('Image export failed. Check console for details.', 'error');
-        });
+        
+        updateStats();
+        renderOrderTable();
+        renderCalendar();
+        renderCharts();
+      }
     };
 
-    // --- Event Listeners ---
-    addOrderForm.addEventListener('submit', addOrder);
-    editOrderForm.addEventListener('submit', updateOrder);
-    prevMonthBtn.addEventListener('click', prevMonth);
-    nextMonthBtn.addEventListener('click', nextMonth);
-    searchInput.addEventListener('input', renderOrders);
-    filterMonth.addEventListener('change', renderOrders);
-    filterDate.addEventListener('change', renderOrders);
-    filterType.addEventListener('change', renderOrders);
-    downloadBtn.addEventListener('click', toggleDownloadDropdown);
-    document.addEventListener('click', (e) => {
-        if (!downloadBtn.contains(e.target) && !downloadDropdown.contains(e.target)) {
-            hideDownloadDropdown();
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      
+      if (username === 'IKK' && password === '123') {
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('mainDashboard').classList.remove('hidden');
+        
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('orderDate').value = today;
+        
+        const savedEmail = localStorage.getItem('emailSettings');
+        if (savedEmail) {
+          emailSettings = JSON.parse(savedEmail);
         }
+        
+        loadEmailAddresses();
+        loadCustomCustomers();
+        
+        OfflineStorage.loadPendingSync();
+        updateOnlineStatus();
+        
+        const offlineOrders = OfflineStorage.load('orders');
+        if (offlineOrders) {
+          allOrders = offlineOrders;
+          updateStats();
+          renderOrderTable();
+          renderCalendar();
+          renderCharts();
+        }
+        
+        if (isOnline) {
+          try {
+            const initResult = await window.dataSdk.init(dataHandler);
+            if (!initResult.isOk) {
+              console.error('Failed to initialize SDK');
+            }
+          } catch (error) {
+            console.error('SDK init error:', error);
+          }
+        }
+      } else {
+        showToast('❌ Invalid username or password!', 'error');
+      }
     });
-    downloadOptions.forEach(option => {
-        option.addEventListener('click', (e) => {
-            const format = e.target.dataset.format;
-            handleDownload(format);
-        });
-    });
-    printBtn.addEventListener('click', generatePrintContent);
 
-    // --- Initialization ---
-    loadOrders();
-    // Set initial date input to today
-    document.getElementById('dateInput').value = formatDate(new Date());
-});
+    document.getElementById('addOrderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      if (allOrders.length >= 999) {
+        showToast('⚠️ Maximum limit of 999 orders reached!', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('addOrderBtn');
+      btn.disabled = true;
+      btn.textContent = '💾';
+      
+      const customerData = JSON.parse(document.getElementById('customerSelect').value);
+      const orderDate = document.getElementById('orderDate').value;
+      
+      const duplicate = allOrders.find(o => 
+        o.customer_name === customerData.name && 
+        o.destination === customerData.destination &&
+        o.order_date === orderDate
+      );
+      
+      if (duplicate) {
+        showToast('❌ Order already exists!', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Add Order';
+        return;
+      }
+      
+      const dnInput = parseInt(document.getElementById('dnInput').value);
+      const dnTarget = calculateDNTarget(dnInput);
+      
+      const orderData = {
+        id: Date.now().toString(),
+        customer_name: customerData.name,
+        destination: customerData.destination,
+        business_unit: document.getElementById('businessUnit').value,
+        dn_target: dnTarget,
+        order_date: orderDate,
+        completed: false,
+        created_at: new Date().toISOString()
+      };
+      
+      allOrders.push(orderData);
+      OfflineStorage.save('orders', allOrders);
+      
+      e.target.reset();
+      document.getElementById('calculatedTarget').textContent = '0';
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('orderDate').value = today;
+      btn.disabled = false;
+      btn.textContent = 'Add Order';
+      
+      showToast('✓ Saved!', 'success');
+      
+      updateStats();
+      setTimeout(() => renderOrderTable(), 10);
+      setTimeout(() => renderCalendar(), 30);
+      setTimeout(() => renderCharts(), 100);
+      
+      if (isOnline && window.dataSdk) {
+        window.dataSdk.create(orderData).then(result => {
+          if (!result.isOk) {
+            OfflineStorage.savePendingSync({ type: 'create', data: orderData });
+          }
+        }).catch(() => {
+          OfflineStorage.savePendingSync({ type: 'create', data: orderData });
+        });
+      } else {
+        OfflineStorage.savePendingSync({ type: 'create', data: orderData });
+      }
+      
+      setTimeout(() => sendEmailNotification(orderData), 200);
+    });
+
+    document.getElementById('prevMonth').addEventListener('click', () => {
+      currentMonth.setMonth(currentMonth.getMonth() - 1);
+      renderCalendar();
+    });
+
+    document.getElementById('nextMonth').addEventListener('click', () => {
+      currentMonth.setMonth(currentMonth.getMonth() + 1);
+      renderCalendar();
+    });
+
+    document.getElementById('chartBar').addEventListener('click', () => {
+      chartType = 'bar';
+      document.getElementById('chartBar').className = 'px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700';
+      document.getElementById('chartLine').className = 'px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300';
+      renderCustomerChart();
+    });
+
+    document.getElementById('chartLine').addEventListener('click', () => {
+      chartType = 'line';
+      document.getElementById('chartLine').className = 'px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700';
+      document.getElementById('chartBar').className = 'px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300';
+      renderCustomerChart();
+    });
+
+    document.getElementById('searchOrder').addEventListener('input', renderOrderTable);
+    document.getElementById('filterMonth').addEventListener('change', renderOrderTable);
+    document.getElementById('chartFilterMonth').addEventListener('change', renderCustomerChart);
+
+    document.getElementById('closeEdit').addEventListener('click', () => {
+      document.getElementById('editModal').classList.add('hidden');
+    });
+
+    // ========================================
+    // EVENT HANDLER: SUBMIT FORM EDIT ORDER
+    // ========================================
+    // Fungsi ini dipanggil ketika tombol Update diklik pada modal edit
+    document.getElementById('editOrderForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); // Mencegah form refresh halaman
+      
+      // Validasi: pastikan ada order yang sedang di-edit
+      if (!currentEditingOrder) return;
+      
+      // Ambil tombol submit dan set status loading
+      const updateBtn = e.target.querySelector('button[type="submit"]');
+      updateBtn.disabled = true;
+      updateBtn.textContent = 'Menyimpan...';
+      
+      // ========================================
+      // UPDATE DATA ORDER DENGAN INPUT BARU
+      // ========================================
+      currentEditingOrder.business_unit = document.getElementById('editBusinessUnit').value;
+      currentEditingOrder.customer_name = document.getElementById('editCustomerName').value;
+      currentEditingOrder.destination = document.getElementById('editDestination').value;
+      currentEditingOrder.dn_target = parseInt(document.getElementById('editDnTarget').value);
+      currentEditingOrder.order_date = document.getElementById('editOrderDate').value;
+      currentEditingOrder.completed = document.getElementById('editCompleted').checked;
+      
+      // Simpan perubahan ke localStorage (offline storage)
+      OfflineStorage.save('orders', allOrders);
+      
+      // Update tampilan: stats, tabel, kalender, dan chart
+      updateStats();
+      renderOrderTable();
+      renderCalendar();
+      renderCharts();
+      
+      // ========================================
+      // SINKRONISASI UPDATE KE DATABASE (ONLINE)
+      // ========================================
+      if (isOnline) {
+        // Jika online, kirim update ke database via Data SDK
+        try {
+          const result = await window.dataSdk.update(currentEditingOrder);
+          if (!result.isOk) {
+            // Jika gagal, simpan ke pending sync untuk dicoba lagi nanti
+            OfflineStorage.savePendingSync({ type: 'update', data: currentEditingOrder });
+          }
+        } catch (error) {
+          // Jika error, simpan ke pending sync
+          OfflineStorage.savePendingSync({ type: 'update', data: currentEditingOrder });
+        }
+      } else {
+        // Jika offline, simpan ke pending sync untuk sinkronisasi nanti
+        OfflineStorage.savePendingSync({ type: 'update', data: currentEditingOrder });
+      }
+      
+      // Tutup modal edit
+      document.getElementById('editModal').classList.add('hidden');
+      
+      // Tampilkan notifikasi sukses
+      showToast('✓ Order berhasil diupdate!', 'success');
+      
+      // Reset tombol submit
+      updateBtn.disabled = false;
+      updateBtn.textContent = 'Update';
+    });
+
+    document.getElementById('primaryColor').addEventListener('input', (e) => {
+      const primaryColor = e.target.value;
+      const bgColor = document.getElementById('bgColor').value;
+      const preview = document.getElementById('colorPreview');
+      preview.style.background = `linear-gradient(135deg, ${primaryColor}, ${bgColor})`;
+    });
+
+    document.getElementById('bgColor').addEventListener('input', (e) => {
+      const bgColor = e.target.value;
+      const primaryColor = document.getElementById('primaryColor').value;
+      const preview = document.getElementById('colorPreview');
+      preview.style.background = `linear-gradient(135deg, ${primaryColor}, ${bgColor})`;
+    });
+
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      document.getElementById('settingsModal').classList.remove('hidden');
+      document.getElementById('primaryColor').value = window.elementSdk?.config?.primary_color || defaultConfig.primary_color;
+      document.getElementById('bgColor').value = window.elementSdk?.config?.background_color || defaultConfig.background_color;
+      
+      const savedEmail = localStorage.getItem('emailSettings');
+      if (savedEmail) {
+        emailSettings = JSON.parse(savedEmail);
+        document.getElementById('senderEmail').value = emailSettings.sender || '';
+        document.getElementById('recipientEmail').value = emailSettings.recipient || '';
+      }
+      
+      loadEmailAddresses();
+      loadCustomCustomers();
+    });
+
+    document.getElementById('closeSettings').addEventListener('click', () => {
+      document.getElementById('settingsModal').classList.add('hidden');
+    });
+
+    document.getElementById('saveSettings').addEventListener('click', async () => {
+      const primary = document.getElementById('primaryColor').value;
+      const bg = document.getElementById('bgColor').value;
+      
+      emailSettings.sender = document.getElementById('senderEmail').value;
+      emailSettings.recipient = document.getElementById('recipientEmail').value;
+      localStorage.setItem('emailSettings', JSON.stringify(emailSettings));
+      
+      if (window.elementSdk) {
+        await window.elementSdk.setConfig({
+          primary_color: primary,
+          background_color: bg,
+          sender_email: emailSettings.sender,
+          recipient_email: emailSettings.recipient
+        });
+      }
+      
+      document.body.style.background = `linear-gradient(to bottom right, ${bg}, ${primary}20)`;
+      document.getElementById('settingsModal').classList.add('hidden');
+      
+      showToast('✓ All settings saved!', 'success');
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      document.getElementById('exportModal').classList.remove('hidden');
+    });
+
+    document.getElementById('closeExport').addEventListener('click', () => {
+      document.getElementById('exportModal').classList.add('hidden');
+    });
+
+    document.getElementById('exportPDF').addEventListener('click', () => {
+      showToast('⏳ Generating PDF...', 'info');
+      
+      const printWindow = window.open('', '_blank');
+      
+      const bu17Count = allOrders.filter(o => o.business_unit === 'BU 17').length;
+      const cmiCount = allOrders.filter(o => o.business_unit === 'CMI').length;
+      const bu17Total = allOrders.filter(o => o.business_unit === 'BU 17').reduce((sum, o) => sum + o.dn_target, 0);
+      const cmiTotal = allOrders.filter(o => o.business_unit === 'CMI').reduce((sum, o) => sum + o.dn_target, 0);
+      const totalDN = allOrders.reduce((sum, o) => sum + o.dn_target, 0);
+      
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>IKK ORDER DN REPORT</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #4f46e5; margin-bottom: 5px; }
+            .date { color: #6b7280; font-size: 14px; margin-bottom: 20px; }
+            .stats { background: #f0f4ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+            .stats h2 { margin-top: 0; color: #1f2937; }
+            .stats p { margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background: #4f46e5; color: white; padding: 10px; text-align: left; }
+            td { padding: 8px; border-bottom: 1px solid #e5e7eb; }
+            tr:hover { background: #f9fafb; }
+            .bu17 { background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+            .cmi { background: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+            .completed { color: #059669; font-weight: bold; }
+            .pending { color: #d97706; }
+            @media print {
+              body { margin: 0; }
+              .no-break { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>IKK ORDER DN REPORT</h1>
+          <p class="date">Generated: ${new Date().toLocaleString('id-ID')}</p>
+          
+          <div class="stats">
+            <h2>SUMMARY STATISTICS</h2>
+            <p><strong>Total Orders:</strong> ${allOrders.length}</p>
+            <p><strong>BU 17 Orders:</strong> ${bu17Count} (${bu17Total} MT)</p>
+            <p><strong>CMI Orders:</strong> ${cmiCount} (${cmiTotal} MT)</p>
+            <p><strong>Total DN:</strong> ${totalDN} MT</p>
+          </div>
+          
+          <h2>COMPLETE ORDER LIST</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Order Date</th>
+                <th>Customer Name</th>
+                <th>Destination</th>
+                <th>Business Unit</th>
+                <th>DN Target (MT)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allOrders.map((order, idx) => `
+                <tr class="no-break">
+                  <td>${idx + 1}</td>
+                  <td>${new Date(order.order_date).toLocaleDateString('id-ID')}</td>
+                  <td>${order.customer_name}</td>
+                  <td>${order.destination}</td>
+                  <td><span class="${order.business_unit === 'BU 17' ? 'bu17' : 'cmi'}">${order.business_unit}</span></td>
+                  <td><strong>${order.dn_target}</strong></td>
+                  <td class="${order.completed ? 'completed' : 'pending'}">${order.completed ? '✓ Completed' : '⏳ Pending'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <p style="margin-top: 30px; color: #6b7280; font-size: 12px;">
+            © 2024 Indah Kiat Karawang - IKK Order DN Tracker System
+          </p>
+        </body>
+        </html>
+      `);
+      
+      printWindow.document.close();
+      
+      setTimeout(() => {
+        printWindow.print();
+        document.getElementById('exportModal').classList.add('hidden');
+        showToast('✓ PDF ready for printing!', 'success');
+      }, 500);
+    });
+
+    document.getElementById('printPreview').addEventListener('click', () => {
+      window.print();
+      document.getElementById('exportModal').classList.add('hidden');
+    });
+
+    document.getElementById('exportExcel').addEventListener('click', () => {
+      showToast('⏳ Generating Excel...', 'info');
+      
+      const bu17Count = allOrders.filter(o => o.business_unit === 'BU 17').length;
+      const cmiCount = allOrders.filter(o => o.business_unit === 'CMI').length;
+      const bu17Total = allOrders.filter(o => o.business_unit === 'BU 17').reduce((sum, o) => sum + o.dn_target, 0);
+      const cmiTotal = allOrders.filter(o => o.business_unit === 'CMI').reduce((sum, o) => sum + o.dn_target, 0);
+      const totalDN = allOrders.reduce((sum, o) => sum + o.dn_target, 0);
+      
+      let csv = 'IKK ORDER DN REPORT\n';
+      csv += `Generated: ${new Date().toLocaleString('id-ID')}\n`;
+      csv += '\n';
+      csv += 'SUMMARY STATISTICS\n';
+      csv += `Total Orders,${allOrders.length}\n`;
+      csv += `BU 17 Orders,${bu17Count}\n`;
+      csv += `BU 17 Total DN,${bu17Total} MT\n`;
+      csv += `CMI Orders,${cmiCount}\n`;
+      csv += `CMI Total DN,${cmiTotal} MT\n`;
+      csv += `Total DN,${totalDN} MT\n`;
+      csv += '\n';
+      csv += 'COMPLETE ORDER LIST\n';
+      csv += 'No,Order Date,Customer Name,Destination,Business Unit,DN Target (MT),Status,Created At\n';
+      
+      allOrders.forEach((order, idx) => {
+        csv += `${idx + 1},${order.order_date},"${order.customer_name}","${order.destination}",${order.business_unit},${order.dn_target},${order.completed ? 'Completed' : 'Pending'},${new Date(order.created_at).toLocaleString('id-ID')}\n`;
+      });
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `IKK-Orders-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      document.getElementById('exportModal').classList.add('hidden');
+      showToast('✓ Excel/CSV downloaded!', 'success');
+    });
+
+    document.getElementById('exportPNG').addEventListener('click', async () => {
+      showToast('⏳ Generating PNG...', 'info');
+      
+      setTimeout(() => {
+        const exportCanvas = document.createElement('canvas');
+        const ctx = exportCanvas.getContext('2d');
+        
+        exportCanvas.width = 1200;
+        exportCanvas.height = 1600;
+        
+        ctx.fillStyle = '#f0f4ff';
+        ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+        
+        ctx.fillStyle = '#4f46e5';
+        ctx.font = 'bold 32px Inter';
+        ctx.fillText('IKK ORDER DN REPORT', 50, 60);
+        
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '16px Inter';
+        ctx.fillText(`Generated: ${new Date().toLocaleString('id-ID')}`, 50, 90);
+        
+        let yPos = 140;
+        ctx.fillStyle = '#1f2937';
+        ctx.font = 'bold 20px Inter';
+        ctx.fillText('SUMMARY STATISTICS', 50, yPos);
+        
+        yPos += 40;
+        ctx.font = '16px Inter';
+        ctx.fillText(`Total Orders: ${allOrders.length}`, 50, yPos);
+        yPos += 30;
+        ctx.fillText(`BU 17: ${allOrders.filter(o => o.business_unit === 'BU 17').length} orders`, 50, yPos);
+        yPos += 30;
+        ctx.fillText(`CMI: ${allOrders.filter(o => o.business_unit === 'CMI').length} orders`, 50, yPos);
+        yPos += 30;
+        ctx.fillText(`Total DN: ${allOrders.reduce((sum, o) => sum + o.dn_target, 0)} MT`, 50, yPos);
+        
+        yPos += 60;
+        const customerChart = document.getElementById('customerChart');
+        ctx.drawImage(customerChart, 50, yPos, 500, 250);
+        
+        const monthlyChart = document.getElementById('monthlyChart');
+        ctx.drawImage(monthlyChart, 600, yPos, 500, 250);
+        
+        const link = document.createElement('a');
+        link.download = `IKK-Dashboard-${new Date().toISOString().split('T')[0]}.png`;
+        link.href = exportCanvas.toDataURL('image/png');
+        link.click();
+        
+        document.getElementById('exportModal').classList.add('hidden');
+        showToast('✓ PNG downloaded!', 'success');
+      }, 100);
+    });
+
+    document.getElementById('exportJPG').addEventListener('click', async () => {
+      showToast('⏳ Generating JPG...', 'info');
+      
+      setTimeout(() => {
+        const exportCanvas = document.createElement('canvas');
+        const ctx = exportCanvas.getContext('2d');
+        
+        exportCanvas.width = 1200;
+        exportCanvas.height = 1600;
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+        
+        ctx.fillStyle = '#4f46e5';
+        ctx.font = 'bold 32px Inter';
+        ctx.fillText('IKK ORDER DN REPORT', 50, 60);
+        
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '16px Inter';
+        ctx.fillText(`Generated: ${new Date().toLocaleString('id-ID')}`, 50, 90);
+        
+        let yPos = 140;
+        ctx.fillStyle = '#1f2937';
+        ctx.font = 'bold 20px Inter';
+        ctx.fillText('SUMMARY STATISTICS', 50, yPos);
+        
+        yPos += 40;
+        ctx.font = '16px Inter';
+        ctx.fillText(`Total Orders: ${allOrders.length}`, 50, yPos);
+        yPos += 30;
+        ctx.fillText(`BU 17: ${allOrders.filter(o => o.business_unit === 'BU 17').length} orders`, 50, yPos);
+        yPos += 30;
+        ctx.fillText(`CMI: ${allOrders.filter(o => o.business_unit === 'CMI').length} orders`, 50, yPos);
+        yPos += 30;
+        ctx.fillText(`Total DN: ${allOrders.reduce((sum, o) => sum + o.dn_target, 0)} MT`, 50, yPos);
+        
+        yPos += 60;
+        const customerChart = document.getElementById('customerChart');
+        ctx.drawImage(customerChart, 50, yPos, 500, 250);
+        
+        const monthlyChart = document.getElementById('monthlyChart');
+        ctx.drawImage(monthlyChart, 600, yPos, 500, 250);
+        
+        const link = document.createElement('a');
+        link.download = `IKK-Dashboard-${new Date().toISOString().split('T')[0]}.jpg`;
+        link.href = exportCanvas.toDataURL('image/jpeg', 0.95);
+        link.click();
+        
+        document.getElementById('exportModal').classList.add('hidden');
+        showToast('✓ JPG downloaded!', 'success');
+      }, 100);
+    });
+
+    document.getElementById('sendEmailBtn').addEventListener('click', () => {
+      const savedEmail = localStorage.getItem('emailSettings');
+      if (savedEmail) {
+        const settings = JSON.parse(savedEmail);
+        document.getElementById('emailSender').value = settings.sender || '';
+        document.getElementById('emailRecipient').value = settings.recipient || '';
+      }
+      
+      const recipientSelect = document.getElementById('emailRecipientSelect');
+      recipientSelect.innerHTML = '<option value="">Select from saved emails...</option>';
+      emailAddressList.forEach(email => {
+        const option = document.createElement('option');
+        option.value = email;
+        option.textContent = email;
+        recipientSelect.appendChild(option);
+      });
+      
+      const bu17Total = allOrders.filter(o => o.business_unit === 'BU 17').reduce((sum, o) => sum + o.dn_target, 0);
+      const cmiTotal = allOrders.filter(o => o.business_unit === 'CMI').reduce((sum, o) => sum + o.dn_target, 0);
+      const totalDN = bu17Total + cmiTotal;
+      
+      // Calculate yesterday's total (Carryover)
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      
+      const yesterdayBU17 = allOrders.filter(o => o.order_date < yesterdayStr && o.business_unit === 'BU 17')
+        .reduce((sum, o) => sum + o.dn_target, 0);
+      const yesterdayCMI = allOrders.filter(o => o.order_date < yesterdayStr && o.business_unit === 'CMI')
+        .reduce((sum, o) => sum + o.dn_target, 0);
+      const carryoverTotal = yesterdayBU17 + yesterdayCMI;
+      
+      // Group by customer
+      const customerTotals = {};
+      allOrders.forEach(order => {
+        const key = `${order.customer_name}|${order.business_unit}`;
+        if (!customerTotals[key]) {
+          customerTotals[key] = {
+            name: order.customer_name,
+            bu: order.business_unit,
+            total: 0
+          };
+        }
+        customerTotals[key].total += order.dn_target;
+      });
+      
+      const sortedCustomers = Object.values(customerTotals).sort((a, b) => {
+        if (a.bu !== b.bu) return a.bu === 'BU 17' ? -1 : 1;
+        return b.total - a.total;
+      });
+      
+      const bu17Customers = sortedCustomers.filter(c => c.bu === 'BU 17');
+      const cmiCustomers = sortedCustomers.filter(c => c.bu === 'CMI');
+      
+      const preview = `
+IKK ORDER DN REPORT - TARGET DN PER CUSTOMER
+==============================================================================
+Generated: ${new Date().toLocaleString()}
+
+TARGET DN (MT) PER CUSTOMER
+==============================================================================
+
+BU 17 CUSTOMERS:
+------------------------------------------------------------------------------
+${bu17Customers.length === 0 ? 'No BU 17 orders' : bu17Customers.map((c, idx) => 
+`${(idx + 1).toString().padEnd(3)} ${c.name.padEnd(50)} ${c.total.toString().padStart(6)} MT`
+).join('\n')}
+------------------------------------------------------------------------------
+TOTAL BU 17:                                                   ${bu17Total.toString().padStart(6)} MT
+
+CMI CUSTOMERS:
+------------------------------------------------------------------------------
+${cmiCustomers.length === 0 ? 'No CMI orders' : cmiCustomers.map((c, idx) => 
+`${(idx + 1).toString().padEnd(3)} ${c.name.padEnd(50)} ${c.total.toString().padStart(6)} MT`
+).join('\n')}
+------------------------------------------------------------------------------
+TOTAL CMI:                                                     ${cmiTotal.toString().padStart(6)} MT
+
+==============================================================================
+GRAND TOTAL:                                                   ${totalDN.toString().padStart(6)} MT
+
+CARRYOVER (Total DN Kemarin):
+------------------------------------------------------------------------------
+BU 17 Carryover:                                               ${yesterdayBU17.toString().padStart(6)} MT
+CMI Carryover:                                                 ${yesterdayCMI.toString().padStart(6)} MT
+------------------------------------------------------------------------------
+TOTAL CARRYOVER:                                               ${carryoverTotal.toString().padStart(6)} MT
+
+==============================================================================
+END OF REPORT
+
+Best Regards,
+IKK Order DN Tracker System
+      `.trim();
+      
+      document.getElementById('emailPreview').textContent = preview;
+      document.getElementById('sendEmailModal').classList.remove('hidden');
+    });
+
+    document.getElementById('closeSendEmail').addEventListener('click', () => {
+      document.getElementById('sendEmailModal').classList.add('hidden');
+    });
+
+    document.getElementById('emailRecipientSelect').addEventListener('change', (e) => {
+      if (e.target.value) {
+        document.getElementById('emailRecipient').value = e.target.value;
+      }
+    });
+
+    document.getElementById('sendEmailForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const sender = document.getElementById('emailSender').value;
+      const recipient = document.getElementById('emailRecipient').value;
+      const subject = document.getElementById('emailSubject').value;
+      const body = document.getElementById('emailPreview').textContent;
+      
+      // Simpan pengaturan email untuk penggunaan selanjutnya
+      emailSettings.sender = sender;
+      emailSettings.recipient = recipient;
+      localStorage.setItem('emailSettings', JSON.stringify(emailSettings));
+      
+      // Buat mailto link untuk membuka aplikasi email default
+      const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(mailtoLink, '_blank');
+      
+      // Tutup modal email
+      document.getElementById('sendEmailModal').classList.add('hidden');
+      
+      // Tampilkan notifikasi sukses
+      showToast('✓ Email dibuka! Silakan kirim dari aplikasi email Anda', 'success');
+      
+      // Simulasi notifikasi pengiriman email setelah 3 detik
+      setTimeout(() => {
+        showEmailDeliveryNotification(recipient, subject);
+      }, 3000);
+    });
+    
+    // Fungsi untuk menampilkan notifikasi pengiriman email
+    function showEmailDeliveryNotification(recipient, subject) {
+      const notificationDiv = document.createElement('div');
+      notificationDiv.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-6 py-4 rounded-xl shadow-2xl z-50 max-w-md animate-pulse';
+      notificationDiv.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="text-3xl">✉️</div>
+          <div class="flex-1">
+            <p class="font-bold text-lg mb-1">📨 Email Terkirim!</p>
+            <p class="text-sm opacity-90 mb-1">Kepada: ${recipient}</p>
+            <p class="text-xs opacity-75">Subject: ${subject}</p>
+            <p class="text-xs opacity-75 mt-2">⏰ ${new Date().toLocaleTimeString('id-ID')}</p>
+          </div>
+          <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:text-gray-200 font-bold text-xl">×</button>
+        </div>
+      `;
+      
+      document.body.appendChild(notificationDiv);
+      
+      // Auto-close setelah 8 detik
+      setTimeout(() => {
+        notificationDiv.style.opacity = '0';
+        notificationDiv.style.transition = 'opacity 0.5s';
+        setTimeout(() => notificationDiv.remove(), 500);
+      }, 8000);
+      
+      // Tambahkan log ke console untuk tracking
+      console.log(`[EMAIL SENT] To: ${recipient} | Time: ${new Date().toLocaleString('id-ID')} | Subject: ${subject}`);
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      document.getElementById('mainDashboard').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('loginForm').reset();
+    });
+
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange: async (config) => {
+          document.getElementById('dashboardTitle').textContent = config.dashboard_title || defaultConfig.dashboard_title;
+          document.getElementById('footerText').textContent = config.footer_text || defaultConfig.footer_text;
+          
+          if (config.background_color) {
+            document.body.style.background = `linear-gradient(to bottom right, ${config.background_color}, ${config.primary_color}20)`;
+          }
+        },
+        mapToCapabilities: (config) => ({
+          recolorables: [
+            {
+              get: () => config.primary_color || defaultConfig.primary_color,
+              set: (value) => {
+                if (window.elementSdk && window.elementSdk.config) {
+                  window.elementSdk.config.primary_color = value;
+                  window.elementSdk.setConfig({ primary_color: value });
+                }
+              }
+            },
+            {
+              get: () => config.background_color || defaultConfig.background_color,
+              set: (value) => {
+                if (window.elementSdk && window.elementSdk.config) {
+                  window.elementSdk.config.background_color = value;
+                  window.elementSdk.setConfig({ background_color: value });
+                }
+              }
+            }
+          ],
+          borderables: [],
+          fontEditable: undefined,
+          fontSizeable: undefined
+        }),
+        mapToEditPanelValues: (config) => new Map([
+          ["dashboard_title", config.dashboard_title || defaultConfig.dashboard_title],
+          ["footer_text", config.footer_text || defaultConfig.footer_text],
+          ["sender_email", config.sender_email || defaultConfig.sender_email],
+          ["recipient_email", config.recipient_email || defaultConfig.recipient_email]
+        ])
+      });
+    }
+
+    renderCalendar();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b039e93a7eafd02',t:'MTc2NjExMjkwOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
